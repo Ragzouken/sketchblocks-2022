@@ -1,0 +1,11 @@
+{
+    "typeAcquisition": {
+      "include": ["three"]
+    },
+    "compilerOptions": {
+      "module": "commonjs",
+      "target": "esnext",
+      "checkJs": true
+    },
+    "include": ["src/**/*.js", "src/library/library.d.ts"]
+}

@@ -1,0 +1,30 @@
+* {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+html, body {
+    margin: 0; padding: 0;
+
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+
+#visible {
+    width: 320px;
+    height: 240px;
+
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+
+    /* outline: dashed yellow 1px; */
+
+    display: flex;
+    flex-direction: row;
+
+    padding: 16px;
+    gap: 16px;
+}
