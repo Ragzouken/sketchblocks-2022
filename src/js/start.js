@@ -455,9 +455,6 @@ void main() {
     });
     kinematic.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
 
-    // console.log(triangles[0], kinematic.triangles[0]);
-    // return;
-
     //const controls = new OrbitControls(camera, renderer.domElement);
     //controls.rotateSpeed = .25;
 
@@ -499,6 +496,7 @@ void main() {
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         const left = forward.clone().cross(kinematic.upVector);
+        forward.crossVectors(kinematic.upVector, left);
 
         const motion = new THREE.Vector3();
 
@@ -536,6 +534,7 @@ void main() {
 
         const jump = held[" "] && kinematic.hadGroundContact;
         
+        //kinematic.gravity = 0;
         kinematic.move(motion, jump ? 5 : 0, 1/60);
 
         // const v = new THREE.Vector3();

@@ -164,8 +164,8 @@ class KinematicGuy {
     constructor() {
         this.radius = .35;
         this.gravity = 9;
-        this.maxSlopeAngle = Math.PI * .25;
-        this.stepHeight = 0;//0.4;
+        this.maxSlopeAngle = (Math.PI * .5) * .65;
+        this.stepHeight = .6;
         this.jumpControl = .5;
         this.maxVelocity = 20;
 
