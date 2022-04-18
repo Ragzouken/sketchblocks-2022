@@ -328,9 +328,7 @@ void main() {
         varying vec3 vNormal;
 
         void main() {
-            gl_FragColor = texture2D(map, vUv) * vec4(color, 1);
-            //gl_FragColor = vec4(vNormal.x, vNormal.y, vNormal.z, 1.);
-
+            gl_FragColor = texture2D(map, vUv) * vec4(color*.75, 1);
             if (gl_FragColor.a < .5) discard;
         }
         `.trim(),
@@ -355,7 +353,7 @@ void main() {
     const pointsVerts = [];
     const pointsGeometry = new THREE.BufferGeometry();
     pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
-    const material = new THREE.LineBasicMaterial( { color: 0xFF00FF } );
+    const material = new THREE.LineBasicMaterial( { color: 0xFF00FF, depthTest: false } );
     const points = new THREE.LineSegments( pointsGeometry, material );
     points.name = "LINES"
     scene.add(points);
@@ -495,8 +493,8 @@ void main() {
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
-        const left = forward.clone().cross(kinematic.upVector);
-        forward.crossVectors(kinematic.upVector, left);
+        const left = forward.clone().cross(kinematic.upVector).normalize();
+        forward.crossVectors(kinematic.upVector, left).normalize();
 
         const motion = new THREE.Vector3();
 
@@ -535,6 +533,8 @@ void main() {
         const jump = held[" "] && kinematic.hadGroundContact;
         
         //kinematic.gravity = 0;
+        kinematic.stepHeight = 0;
+        kinematic.radius = .5;
         kinematic.move(motion, jump ? 5 : 0, 1/60);
 
         // const v = new THREE.Vector3();
@@ -548,9 +548,35 @@ void main() {
         //     );
         // });
 
+        kinematic.groundContacts.forEach((contact) => {
+            const origin = kinematic.nextPosition;
+            const point = origin.clone().add(contact.displacement);
+
+            pointsVerts.push(
+                origin.x, origin.y, origin.z,
+                point.x, point.y, point.z,
+            );
+        });
+
+        {
+            const point = kinematic.lastStepUp;
+            pointsVerts.push(
+                point.x, point.y, point.z,
+                point.x, point.y+.1, point.z,
+            );
+        }
+
+        {
+            const point = kinematic.lastStepDown;
+            pointsVerts.push(
+                point.x, point.y, point.z,
+                point.x, point.y+.1, point.z,
+            );
+        }
+
         if (kinematic.nextPosition.y < -5) kinematic.nextPosition.y = 5;
         sphere.position.copy(kinematic.nextPosition);
-        guy.position.copy(kinematic.nextPosition).y += .15;
+        guy.position.copy(kinematic.nextPosition).y += (.5 - kinematic.radius);
         sphere.visible = false;
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));

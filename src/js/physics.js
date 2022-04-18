@@ -183,12 +183,18 @@ class KinematicGuy {
         this.jumpVelocity = new THREE.Vector3();
         this.gravityVelocity = new THREE.Vector3();
 
+        this.lastStepUp = new THREE.Vector3();
+        this.lastStepDown = new THREE.Vector3();
+
         /** @type {PhysicsTriangle[]} */
         this.triangles = [];
         /** @type {PhysicsContact[]} */
         this.contacts = [];
         /** @type {Plane[]} */
         this.bounds = [];
+
+        /** @type {PhysicsContact[]} */
+        this.groundContacts = [];
     }
 
     /**
@@ -204,7 +210,6 @@ class KinematicGuy {
         if (this.gravity === 0) {
             this.fly(targetMotion);
         } else {
-            // TODO: walking vs jumping
             const climbing = this.isClimbing && this.jumpVelocity.y + this.gravityVelocity.y <= 0;
             const airborne = !this.hadGroundContact && !climbing && !this.isSteppingUp;
  
@@ -249,6 +254,8 @@ class KinematicGuy {
                 }
             }
 
+            targetMotion.clampLength(0, this.maxVelocity * deltaTime);
+
             this.testPosition.copy(this.prevPosition);
             this.updateContacts(this.testPosition);
 
@@ -272,7 +279,18 @@ class KinematicGuy {
                 this.isSteppingDown = false;
             }
 
-            // TODO: movement limitation?
+            // limit motion
+            const maxMotionLength = this.isSteppingDown 
+                ? targetMotion.length() 
+                : this.maxVelocity * deltaTime;
+
+            const testMotion = this.testPosition.clone().sub(this.prevPosition);
+            const testMotionLength = testMotion.length();
+            if (testMotionLength > maxMotionLength) {
+                this.testPosition.copy(actualMotion).multiplyScalar(maxMotionLength / testMotionLength).add(this.prevPosition);
+                actualMotion.copy(this.testPosition).sub(this.prevPosition);
+                this.updateContacts(this.testPosition);
+            } 
 
             this.hadGroundContact = this.hasGroundContact();
 
@@ -457,7 +475,6 @@ class KinematicGuy {
      * @param {THREE.Vector3} motion
      */
     stepUp(motion) {
-        console.log("STEP UP");
         const startPosition = this.testPosition.clone();
 
         const targetMotion = motion;
@@ -468,6 +485,7 @@ class KinematicGuy {
         // if entirely vertical motion, cancel
         if (forward.manhattanLength() === 0)
             return false;
+        forward.normalize();
 
         const forwardStepDistance = this.radius - 2 * this.allowedPenetration;
         const forwardStep = forward.clone().multiplyScalar(forwardStepDistance);
@@ -479,10 +497,14 @@ class KinematicGuy {
 
         const blocked = this.hasForbiddenContact();
         if (!blocked) {
+            console.log("MIGHT STEP UP?")
             // is there something to stand on?
             const groundContact = this.stepDown(true);
             if (groundContact) return true;
+            console.log("NO STEP DOWN FROM UP");
         }
+
+        this.lastStepUp.copy(this.testPosition);
 
         // couldn't step, rollback
         this.testPosition.copy(startPosition);
@@ -513,14 +535,17 @@ class KinematicGuy {
         const actualMotion = targetMotion.clone();
         const safeMotion = new THREE.Vector3();
 
+        this.testPosition.copy(startPosition).add(actualMotion);
+
         const correction = new THREE.Vector3();
 
         let hasUnallowedContacts = false;
         let hasBottomContact = false;
         let foundAllowedSlope = false;
+        let bisect = true;
 
         this.bounds.length = 0;
-        for (let i = 0; i < slideIterations && (hasUnallowedContacts || !hasBottomContact); ++i) {
+        for (let i = 0; i < slideIterations && (hasUnallowedContacts || !hasBottomContact || (bisect && this.contacts.length === 0)); ++i) {
             this.addBounds(this.testPosition);
 
             let solvedBounds = this.bounds.length === 0;
@@ -544,7 +569,9 @@ class KinematicGuy {
                         // depentrate vertically only
                         const d = -distance / this.upVector.dot(bound.normal);
                         correction.copy(this.upVector).multiplyScalar(d);
+                        
                         actualMotion.add(correction);
+                        this.testPosition.copy(startPosition).add(actualMotion);
 
                         solvedBounds = false;
                     }
@@ -562,14 +589,21 @@ class KinematicGuy {
             const noOverallMotion = startPosition.clone().add(actualMotion).sub(this.testPosition).manhattanLength() === 0;
 
             // give up if we haven't moved after second iteration
-            if (i > 0 && noOverallMotion)
-                break;
+            if (i > 0 && noOverallMotion) {
+                if (!bisect) break;
+
+                this.bounds.length = 0;
+
+                actualMotion.copy(safeMotion).add(targetMotion).multiplyScalar(.5);
+                this.testPosition.copy(startPosition).add(actualMotion);
+            }
             
             if (!solvedBounds && !progress) {
                 this.bounds.length = 0;
                 hasBottomContact = false;
 
                 actualMotion.copy(safeMotion).add(targetMotion).multiplyScalar(.5);
+                this.testPosition.copy(startPosition).add(actualMotion);
             }
 
             this.testPosition.copy(startPosition).add(actualMotion);
@@ -577,7 +611,7 @@ class KinematicGuy {
 
             hasUnallowedContacts = this.hasForbiddenContact();
 
-            //bisect = bisect || hasUnallowedContacts;
+            bisect = bisect || hasUnallowedContacts;
 
             if (hasUnallowedContacts) {
                 targetMotion.copy(actualMotion);
@@ -588,10 +622,14 @@ class KinematicGuy {
 
         if (hasUnallowedContacts || !hasBottomContact || (onlyOntoAllowedSlopes && !foundAllowedSlope))
         {
+            this.lastStepDown.copy(this.testPosition);
+
             this.testPosition.copy(startPosition);
             this.updateContacts(this.testPosition);
             return false;
         }
+
+        return true;
     }
 
     updateContacts(position) {
@@ -626,11 +664,17 @@ class KinematicGuy {
     }
 
     hasGroundContact() {
-        const maxDisplacement = this.radius * Math.cos(this.maxSlopeAngle);
+        const maxDisplacement = -this.radius * Math.cos(this.maxSlopeAngle);
 
+        this.groundContacts.length = 0;
         for (const contact of this.contacts) {
-            if (contact.displacement.y <= maxDisplacement) return true;
+            if (contact.displacement.y <= maxDisplacement) {
+                this.groundContacts.push(contact);
+                //console.log(maxDisplacement, contact.displacement.y);
+            }
         }
+
+        return this.groundContacts.length > 0;
     }
 
     /**
@@ -657,11 +701,15 @@ class KinematicGuy {
             };
 
             // TODO: ignore duplicates
-            // TODO: sort wall vs ramp
-            // (walls and ramps are different because one halts movement the 
-            // other allows sliding)
+            
+            // arrange bounds so walls are always solved before ramps
+            const wall = this.isAllowedSlope(plane.normal);
 
-            this.bounds.push(plane);
+            if (wall) {
+                this.bounds.splice(0, 0, plane);
+            } else {
+                this.bounds.push(plane);
+            }
         });
     }
 }
