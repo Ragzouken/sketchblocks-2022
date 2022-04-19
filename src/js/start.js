@@ -235,8 +235,8 @@ function makeGeometry(data) {
 
 async function start() {
     const visible = document.getElementById("visible");
-    const w = 320;
-    const h = 240;
+    const w = 320*2;
+    const h = 240*2;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
@@ -334,7 +334,7 @@ void main() {
         `.trim(),
 
         side: THREE.DoubleSide,
-        transparent: true,
+        transparent: false,
     });
 
     const kinematic = new KinematicGuy();
@@ -353,9 +353,10 @@ void main() {
     const pointsVerts = [];
     const pointsGeometry = new THREE.BufferGeometry();
     pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
-    const material = new THREE.LineBasicMaterial( { color: 0xFF00FF, depthTest: false } );
+    const material = new THREE.LineBasicMaterial( { color: 0xFF00FF, depthTest: false, depthWrite: true } );
     const points = new THREE.LineSegments( pointsGeometry, material );
     points.name = "LINES"
+    points.renderOrder = 1;
     scene.add(points);
 
     //test.uniforms.color.value = new THREE.Color(0xFF0000);
@@ -533,8 +534,7 @@ void main() {
         const jump = held[" "] && kinematic.hadGroundContact;
         
         //kinematic.gravity = 0;
-        kinematic.stepHeight = 0;
-        kinematic.radius = .5;
+        kinematic.stepHeight = .55;
         kinematic.move(motion, jump ? 5 : 0, 1/60);
 
         // const v = new THREE.Vector3();
@@ -548,13 +548,28 @@ void main() {
         //     );
         // });
 
-        kinematic.groundContacts.forEach((contact) => {
-            const origin = kinematic.nextPosition;
-            const point = origin.clone().add(contact.displacement);
+        kinematic.contacts.forEach((contact) => {
+            const origin = contact.center;
+            const point = contact.world;
 
             pointsVerts.push(
                 origin.x, origin.y, origin.z,
                 point.x, point.y, point.z,
+            );
+
+            pointsVerts.push(
+                contact.triangle.p0.x, contact.triangle.p0.y, contact.triangle.p0.z,
+                contact.triangle.p1.x, contact.triangle.p1.y, contact.triangle.p1.z,
+            );
+
+            pointsVerts.push(
+                contact.triangle.p1.x, contact.triangle.p1.y, contact.triangle.p1.z,
+                contact.triangle.p2.x, contact.triangle.p2.y, contact.triangle.p2.z,
+            );
+
+            pointsVerts.push(
+                contact.triangle.p0.x, contact.triangle.p0.y, contact.triangle.p0.z,
+                contact.triangle.p2.x, contact.triangle.p2.y, contact.triangle.p2.z,
             );
         });
 
@@ -566,18 +581,19 @@ void main() {
             );
         }
 
-        {
-            const point = kinematic.lastStepDown;
-            pointsVerts.push(
-                point.x, point.y, point.z,
-                point.x, point.y+.1, point.z,
-            );
-        }
+        // {
+        //     const point = kinematic.lastStepDown;
+        //     pointsVerts.push(
+        //         point.x, point.y, point.z,
+        //         point.x, point.y+.1, point.z,
+        //     );
+        // }
 
         if (kinematic.nextPosition.y < -5) kinematic.nextPosition.y = 5;
         sphere.position.copy(kinematic.nextPosition);
         guy.position.copy(kinematic.nextPosition).y += (.5 - kinematic.radius);
         sphere.visible = false;
+        //guy.visible = false;
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
 

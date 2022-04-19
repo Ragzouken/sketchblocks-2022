@@ -8,6 +8,9 @@
  * @typedef {Object} PhysicsContact
  * @property {THREE.Vector3} displacement
  * @property {THREE.Vector3} normal
+ * @property {THREE.Vector3} world
+ * @property {THREE.Vector3} center
+ * @property {PhysicsTriangle} triangle
  * @property {number} penetration
  */
 
@@ -45,8 +48,8 @@ function planePointDistance(plane, point) {
 	const normPAB = a.clone().cross(b); // Normal of PAB (w)
 
     // testing normal direction somehow..
-    const test1 = normPBC.dot(normPCA) < 0;
-    const test2 = normPBC.dot(normPAB) < 0;
+    const test1 = normPBC.dot(normPCA) <= 0;
+    const test2 = normPBC.dot(normPAB) <= 0;
 
     return !test1 && !test2;
 }
@@ -56,7 +59,7 @@ function planePointDistance(plane, point) {
  * @param {THREE.Vector3} l1
  * @param {THREE.Vector3} p
  */
-function closestPointLine(l0, l1, p) {
+function closestPointLine(l0, l1, p) { 
     const v = l1.clone().sub(l0);
     let t = p.clone().sub(l0).dot(v) / v.dot(v);
     t = Math.max(t, 0);
@@ -158,11 +161,36 @@ class PhysicsTriangle {
         }
         return c3;
     }
+
+    /**
+     * @param {THREE.Vector3} A
+     * @param {THREE.Vector3} B
+     * @returns {THREE.Vector3}
+     */
+    closestPointSegment(A, B) {
+        const capsuleNormal = B.clone().sub(A).normalize();
+
+        const a = this.plane.normal.dot(capsuleNormal);
+
+        if (a === 0) 
+            return A.clone();
+
+        const f = 1 / this.plane.normal.dot(capsuleNormal);
+        const p = this.p0.clone().sub(A).multiplyScalar(f);
+        const t = this.plane.normal.dot(p);
+        const i = capsuleNormal.clone().multiplyScalar(t).add(A);
+
+        const c1 = this.closestPoint(i);
+        const c2 = closestPointLine(A, B, c1);
+
+        return c2;
+    }
 }
 
 class KinematicGuy {
     constructor() {
-        this.radius = .35;
+        this.radius = .25;
+        this.height = .8;
         this.gravity = 9;
         this.maxSlopeAngle = (Math.PI * .5) * .65;
         this.stepHeight = .6;
@@ -206,6 +234,8 @@ class KinematicGuy {
         const targetMotion = moveVelocity.clone().multiplyScalar(deltaTime);
         const actualMotion = targetMotion.clone(); // ehhh
         const correction = new THREE.Vector3();
+
+        this.testPosition.copy(this.prevPosition);
 
         if (this.gravity === 0) {
             this.fly(targetMotion);
@@ -273,7 +303,7 @@ class KinematicGuy {
             const jumping = this.jumpVelocity.manhattanLength() > 0;
             const grounded = this.hadGroundContact || this.isSteppingDown;
 
-            if (this.isSteppingUp && grounded && !jumping && !this.isClimbing) {
+            if (!this.isSteppingUp && grounded && !jumping && !this.isClimbing) {
                 this.isSteppingDown = this.stepDown(!this.isSteppingDown);
             } else {
                 this.isSteppingDown = false;
@@ -284,13 +314,13 @@ class KinematicGuy {
                 ? targetMotion.length() 
                 : this.maxVelocity * deltaTime;
 
-            const testMotion = this.testPosition.clone().sub(this.prevPosition);
-            const testMotionLength = testMotion.length();
-            if (testMotionLength > maxMotionLength) {
-                this.testPosition.copy(actualMotion).multiplyScalar(maxMotionLength / testMotionLength).add(this.prevPosition);
-                actualMotion.copy(this.testPosition).sub(this.prevPosition);
-                this.updateContacts(this.testPosition);
-            } 
+            // const testMotion = this.testPosition.clone().sub(this.prevPosition);
+            // const testMotionLength = testMotion.length();
+            // if (testMotionLength > maxMotionLength) {
+            //     this.testPosition.copy(actualMotion).multiplyScalar(maxMotionLength / testMotionLength).add(this.prevPosition);
+            //     actualMotion.copy(this.testPosition).sub(this.prevPosition);
+            //     this.updateContacts(this.testPosition);
+            // } 
 
             this.hadGroundContact = this.hasGroundContact();
 
@@ -304,8 +334,6 @@ class KinematicGuy {
             // ehh
             this.nextPosition.copy(this.testPosition);
         }
-
-        // TODO: velocity stuff?
     }
 
     fly(motion) {
@@ -334,14 +362,15 @@ class KinematicGuy {
                     if (bound.normal.dot(actualMotion) >= 0) continue;
 
                     // distance to plane..
-                    const distance = planePointDistance(bound, this.testPosition);
+                    
+                    const test = this.prevPosition.clone().add(actualMotion);
+                    const distance = planePointDistance(bound, test);
                     const inside = distance + this.allowedPenetration < 0;
 
                     if (inside) {
                         // update motion
                         correction.copy(bound.normal).multiplyScalar(-distance)
                         actualMotion.add(correction);
-                        this.testPosition.copy(this.prevPosition).add(actualMotion);
 
                         solvedBounds = false;
                     }
@@ -362,6 +391,8 @@ class KinematicGuy {
         } else {
             this.nextPosition.copy(this.testPosition);
         }
+
+        this.updateContacts(this.nextPosition);
     }
 
     /**
@@ -379,7 +410,7 @@ class KinematicGuy {
         const targetDirectionVertical = this.upVector.clone().multiplyScalar(this.upVector.dot(targetDirection));
         const targetDirectionHorizontal = targetMotion.clone().sub(targetDirectionVertical);
 
-        this.testPosition.copy(this.prevPosition);
+        //this.testPosition.copy(this.prevPosition);
         this.updateContacts(this.testPosition);
 
         const correction = new THREE.Vector3();
@@ -497,14 +528,13 @@ class KinematicGuy {
 
         const blocked = this.hasForbiddenContact();
         if (!blocked) {
-            console.log("MIGHT STEP UP?")
             // is there something to stand on?
             const groundContact = this.stepDown(true);
-            if (groundContact) return true;
-            console.log("NO STEP DOWN FROM UP");
+            if (groundContact) {
+                this.lastStepUp.copy(this.testPosition);
+                return true;
+            }
         }
-
-        this.lastStepUp.copy(this.testPosition);
 
         // couldn't step, rollback
         this.testPosition.copy(startPosition);
@@ -518,8 +548,7 @@ class KinematicGuy {
      * @returns {boolean}
      */
     stepDown(onlyOntoAllowedSlopes) {
-        console.log("STEP DOWN");
-        const slideIterations = 4;
+        const slideIterations = 8;
         const boundIterations = 4;
 
         // we're already on the ground
@@ -629,18 +658,25 @@ class KinematicGuy {
             return false;
         }
 
+        this.lastStepDown.copy(this.testPosition);
         return true;
     }
 
     updateContacts(position) {
         this.contacts.length = 0;
+
+        const A = position;
+        const B = this.upVector.clone().multiplyScalar(this.height-this.radius*2).add(position);
+
         this.triangles.forEach((triangle) => {
-            const displacement = triangle.closestPoint(position).sub(position);
+            const center = triangle.closestPointSegment(A, B);
+            const closest = triangle.closestPoint(center);
+            const displacement = closest.clone().sub(center);
             const penetration = this.radius - displacement.length();
 
             if (penetration > 0) {
                 const normal = displacement.clone().multiplyScalar(-1).normalize();
-                this.contacts.push({ displacement, normal, penetration });
+                this.contacts.push({ displacement, normal, penetration, world: closest, center, triangle });
             }
         });
     }
