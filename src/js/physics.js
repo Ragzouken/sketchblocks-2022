@@ -310,13 +310,14 @@ class KinematicGuy {
             }
 
             // limit motion
-            const maxMotionLength = this.isSteppingDown 
+            const maxMotionLength = !this.isSteppingDown 
                 ? targetMotion.length() 
                 : this.maxVelocity * deltaTime;
 
             // const testMotion = this.testPosition.clone().sub(this.prevPosition);
             // const testMotionLength = testMotion.length();
             // if (testMotionLength > maxMotionLength) {
+            //     console.log("TOO MUCH", testMotionLength, maxMotionLength)
             //     this.testPosition.copy(actualMotion).multiplyScalar(maxMotionLength / testMotionLength).add(this.prevPosition);
             //     actualMotion.copy(this.testPosition).sub(this.prevPosition);
             //     this.updateContacts(this.testPosition);
@@ -518,7 +519,7 @@ class KinematicGuy {
             return false;
         forward.normalize();
 
-        const forwardStepDistance = this.radius - 2 * this.allowedPenetration;
+        const forwardStepDistance = this.radius*.5 - 2 * this.allowedPenetration;
         const forwardStep = forward.clone().multiplyScalar(forwardStepDistance);
         const upwardStep = this.upVector.clone().multiplyScalar(this.stepHeight);
 

@@ -534,7 +534,7 @@ void main() {
         const jump = held[" "] && kinematic.hadGroundContact;
         
         //kinematic.gravity = 0;
-        kinematic.stepHeight = .55;
+        kinematic.stepHeight = .2;
         kinematic.move(motion, jump ? 5 : 0, 1/60);
 
         // const v = new THREE.Vector3();
