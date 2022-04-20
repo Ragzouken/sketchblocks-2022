@@ -164,7 +164,7 @@ const leveldata = {
         ["cube", [-1,  0,  0]],
         ["cube", [ 0,  0,  0]],
         ["cube", [ 1,  0,  0]],
-        ["cube", [ 1,  0, -1]],
+        ["slab", [ 1,  0, -1], [0, 2]],
         ["slab", [ 0,  0,  1]],
         ["slab", [ 1,  0,  1]],
 
@@ -233,10 +233,13 @@ function makeGeometry(data) {
     return geometry;
 }
 
+let debug;
+
 async function start() {
+    debug = document.getElementById("debug");
     const visible = document.getElementById("visible");
-    const w = 320*2;
-    const h = 240*2;
+    const w = 320;
+    const h = 240;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
@@ -269,6 +272,7 @@ async function start() {
     // orbTex.magFilter = THREE.NearestFilter;
 
     const guyTex = new THREE.TextureLoader().load("guy-back.png");
+    const guyFallTex = new THREE.TextureLoader().load("guy-fall.png");
     const gridTex = new THREE.TextureLoader().load("grid.png");
 
     const geometries = {
@@ -338,13 +342,13 @@ void main() {
     });
 
     const kinematic = new KinematicGuy();
-    const radius = kinematic.radius;
+    const radius = kinematic.capsule.radius;
 
     const sphere = new THREE.Mesh(
         new THREE.SphereGeometry(radius, 16, 8),
         materials.grid,
     );
-    sphere.position.set(0, kinematic.radius, 1);
+    sphere.position.set(0, kinematic.capsule.radius, 1);
     
     scene.add(sphere);
 
@@ -452,12 +456,14 @@ void main() {
             triangles.push([v0, v1, v2]);
         }
     });
-    kinematic.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
+    kinematic.scene.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
+    kinematic.prevPosition.set(0, 2, 0);
 
     //const controls = new OrbitControls(camera, renderer.domElement);
     //controls.rotateSpeed = .25;
 
     const held = {};
+    
 
     function animate() {
         requestAnimationFrame( animate );
@@ -489,64 +495,58 @@ void main() {
 
         pointsVerts.length = 0;
 
-        kinematic.prevPosition.copy(sphere.position);
-        kinematic.nextPosition.copy(kinematic.prevPosition);
-
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
-        const left = forward.clone().cross(kinematic.upVector).normalize();
-        forward.crossVectors(kinematic.upVector, left).normalize();
+        const up = kinematic.upVector.clone();
+        const left = forward.clone().cross(up).normalize();
+        forward.crossVectors(up, left).normalize();
+
+        if (kinematic.groundContacts.length > 0) {
+            up.set(0, 0, 0);
+            kinematic.groundContacts.forEach((contact) => up.add(contact.normal));
+            up.divideScalar(kinematic.groundContacts.length);
+            up.normalize();
+        }
+
+        left.crossVectors(forward, up);
+        forward.crossVectors(up, left);
+
+        const origin = kinematic.nextPosition.clone();
+        const forgin = origin.clone().add(forward);
+
+        pointsVerts.push(
+            origin.x, origin.y, origin.z,
+            forgin.x, forgin.y, forgin.z,
+        );
+
+        forgin.copy(origin).add(left);
+
+        pointsVerts.push(
+            origin.x, origin.y, origin.z,
+            forgin.x, forgin.y, forgin.z,
+        );
 
         const motion = new THREE.Vector3();
 
-        if (held["w"]) {
-            motion.add(forward.multiplyScalar(3));
-        }
+        if (held["w"]) motion.add(forward.clone().multiplyScalar(3));
+        if (held["s"]) motion.add(forward.clone().multiplyScalar(-3));
+        if (held["a"]) motion.add(left.clone().multiplyScalar(-3));
+        if (held["d"]) motion.add(left.clone().multiplyScalar(3));
+        if (held["ArrowLeft"]) pivot.rotation.y -= .02;
+        if (held["ArrowRight"]) pivot.rotation.y += .02;
+        if (held["ArrowUp"]) pivot.rotation.x -= .02;
+        if (held["ArrowDown"]) pivot.rotation.x += .02;
 
-        if (held["s"]) {
-            motion.add(forward.multiplyScalar(-3));
-        }
-
-        if (held["a"]) {
-            motion.add(left.multiplyScalar(-3));
-        }
-
-        if (held["d"]) {
-            motion.add(left.multiplyScalar(3));
-        }
-
-        if (held["ArrowLeft"]) {
-            pivot.rotation.y -= .02;
-        }
-
-        if (held["ArrowRight"]) {
-            pivot.rotation.y += .02;
-        }
-
-        if (held["ArrowUp"]) {
-            pivot.rotation.x -= .02;
-        }
-
-        if (held["ArrowDown"]) {
-            pivot.rotation.x += .02;
-        }
-
+        kinematic.gravity = held["x"] ? 0 : 9;
         const jump = held[" "] && kinematic.hadGroundContact;
         
-        //kinematic.gravity = 0;
-        kinematic.stepHeight = .2;
-        kinematic.move(motion, jump ? 5 : 0, 1/60);
+        kinematic.stepHeight = .5;
 
-        // const v = new THREE.Vector3();
-        // kinematic.contacts.forEach((contact) => {
-        //     const c = kinematic.nextPosition;
-        //     v.copy(contact.displacement);
-
-        //     pointsVerts.push(
-        //         c.x, c.y, c.z,
-        //         c.x+v.x, c.y+v.y, c.z+v.z,
-        //     );
-        // });
+        // hack. cause: falling too fast correctly avoid bullet hole but doesn't
+        // allow you to actually touch the ground
+        const split = 4 - Math.floor(kinematic.gravityVelocity.y);
+        for (let i = 0; i < split; ++i)
+            kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
         kinematic.contacts.forEach((contact) => {
             const origin = contact.center;
@@ -581,24 +581,28 @@ void main() {
             );
         }
 
-        // {
-        //     const point = kinematic.lastStepDown;
-        //     pointsVerts.push(
-        //         point.x, point.y, point.z,
-        //         point.x, point.y+.1, point.z,
-        //     );
-        // }
+        sphere.position.copy(kinematic.lastStepDown);
+        sphere.scale.set(1, 1, 1).multiplyScalar(4 * kinematic.capsule.radius);
+        sphere.visible = true;
 
-        if (kinematic.nextPosition.y < -5) kinematic.nextPosition.y = 5;
-        sphere.position.copy(kinematic.nextPosition);
-        guy.position.copy(kinematic.nextPosition).y += (.5 - kinematic.radius);
-        sphere.visible = false;
+        guy.material.map = kinematic.hadGroundContact ? guyTex : guyFallTex;
+
+        if (kinematic.nextPosition.y < -5) {
+            kinematic.nextPosition.y = 5;
+            kinematic.prevPosition.copy(kinematic.nextPosition);
+        }
+
+        debug.textContent = `gravity: ${kinematic.gravityVelocity.y} / jump: ${kinematic.jumpVelocity.x},${kinematic.jumpVelocity.y},${kinematic.jumpVelocity.z}`;
+
+        guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
+        guy.position.multiplyScalar(.5);
+        //ssphere.visible = false;
         //guy.visible = false;
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
 
         //controls.target = pivot.position;
-        pivot.position.copy(sphere.position);
+        pivot.position.lerp(guy.position, .25);
         //controls.update();
     };
 

@@ -31,30 +31,6 @@ function planePointDistance(plane, point) {
 }
 
 /**
- * @param {THREE.Vector3} t0
- * @param {THREE.Vector3} t1
- * @param {THREE.Vector3} t2
- * @param {THREE.Vector3} p
- */
- function pointIsInTriangle(t0, t1, t2, p) {
-	// triangle relative to point
-	const a = t0.clone().sub(p);
-	const b = t1.clone().sub(p);
-	const c = t2.clone().sub(p);
-
-    // normals
-	const normPBC = b.clone().cross(c); // Normal of PBC (u)
-	const normPCA = c.clone().cross(a); // Normal of PCA (v)
-	const normPAB = a.clone().cross(b); // Normal of PAB (w)
-
-    // testing normal direction somehow..
-    const test1 = normPBC.dot(normPCA) <= 0;
-    const test2 = normPBC.dot(normPAB) <= 0;
-
-    return !test1 && !test2;
-}
-
-/**
  * @param {THREE.Vector3} l0
  * @param {THREE.Vector3} l1
  * @param {THREE.Vector3} p
@@ -67,46 +43,17 @@ function closestPointLine(l0, l1, p) {
     return v.multiplyScalar(t).add(l0);
 }
 
-/**
- * @param {THREE.Vector3} t0
- * @param {THREE.Vector3} t1
- * @param {THREE.Vector3} t2
- * @param {THREE.Vector3} p
- * @returns {{ point: THREE.Vector3, normal: THREE.Vector3 }}
- */
-function closestPointTriangle(t0, t1, t2, p) {
-    const closest = new THREE.Vector3();
-
-    // triangle plane
-    const t10 = t1.clone().sub(t0);
-    const t20 = t2.clone().sub(t0);
-    const tN = t10.clone().cross(t20).normalize();
-    const tD = tN.clone().dot(t0);
-
-    // closest on plane
-    const d = tN.clone().multiplyScalar(tN.dot(p) - tD);
-    closest.subVectors(p, d);
-
-    if (pointIsInTriangle(t0, t1, t2, closest)) {
-        return { point: closest, normal: tN };
+class PhysicsCapsule {
+    /**
+     * @param {number} radius
+     * @param {number} height
+     * @param {THREE.Vector3} up
+     */
+    constructor(radius, height, up = new THREE.Vector3(0, 1, 0)) {
+        this.radius = radius;
+        this.height = height;
+        this.up = up;
     }
-
-    // closest point on each edge
-	const c1 = closestPointLine(t0, t1, closest); // Line AB
-	const c2 = closestPointLine(t1, t2, closest); // Line BC
-	const c3 = closestPointLine(t2, t0, closest); // Line CA
-
-    // pick closest of those
-    const l1 = closest.clone().sub(c1).lengthSq();
-    const l2 = closest.clone().sub(c2).lengthSq();
-    const l3 = closest.clone().sub(c3).lengthSq();
-
-    if (l1 < l2 && l1 < l3) {
-        return { point: c1, normal: tN };
-    } else if (l2 < l1 && l2 < l3) {
-        return { point: c2, normal: tN };
-    }
-    return { point: c3, normal: tN };
 }
 
 class PhysicsTriangle {
@@ -128,6 +75,31 @@ class PhysicsTriangle {
         this.plane.distance = this.plane.normal.dot(p0);
     }
 
+    /** 
+     * @param {THREE.Vector3} point
+     * @returns {boolean}
+     */
+    contains(point) {
+        // almost understand this.. something along the lines of winding order
+        // of vertices encircling test point
+
+        // vectors from test point to vertices
+        const a = this.p0.clone().sub(point);
+        const b = this.p1.clone().sub(point);
+        const c = this.p2.clone().sub(point);
+
+        // normals
+        const normPBC = b.clone().cross(c);
+        const normPCA = c.clone().cross(a);
+        const normPAB = a.clone().cross(b);
+
+        // do all the normals point in the same direction?
+        const test1 = normPBC.dot(normPAB) > 0;
+        const test2 = normPBC.dot(normPCA) > 0;
+
+        return test1 && test2;
+    }
+    
     /**
      * @param {THREE.Vector3} point
      * @returns {THREE.Vector3}
@@ -140,9 +112,7 @@ class PhysicsTriangle {
         closest.multiplyScalar(this.plane.normal.dot(point) - this.plane.distance);
         closest.subVectors(point, closest);
 
-        if (pointIsInTriangle(this.p0, this.p1, this.p2, closest)) {
-            return closest;
-        }
+        if (this.contains(closest)) return closest;
     
         // closest point on each edge
         const c1 = closestPointLine(this.p0, this.p1, closest); // Line AB
@@ -158,8 +128,9 @@ class PhysicsTriangle {
             return c1;
         } else if (l2 < l1 && l2 < l3) {
             return c2;
+        } else {
+            return c3;
         }
-        return c3;
     }
 
     /**
@@ -175,8 +146,7 @@ class PhysicsTriangle {
         if (a === 0) 
             return A.clone();
 
-        const f = 1 / this.plane.normal.dot(capsuleNormal);
-        const p = this.p0.clone().sub(A).multiplyScalar(f);
+        const p = this.p0.clone().sub(A).divideScalar(a);
         const t = this.plane.normal.dot(p);
         const i = capsuleNormal.clone().multiplyScalar(t).add(A);
 
@@ -187,15 +157,44 @@ class PhysicsTriangle {
     }
 }
 
+class PhysicsScene {
+    constructor() {
+        this.triangles = [];
+    }
+
+    /**
+     * @param {PhysicsCapsule} capsule
+     * @param {THREE.Vector3} position
+     */
+    getCapsuleContacts(capsule, position) {
+        const contacts = [];
+
+        const A = position;
+        const B = capsule.up.clone().multiplyScalar(capsule.height - capsule.radius * 2).add(position);
+
+        this.triangles.forEach((triangle) => {
+            const center = triangle.closestPointSegment(A, B);
+            const closest = triangle.closestPoint(center);
+            const displacement = closest.clone().sub(center);
+            const penetration = capsule.radius - displacement.length();
+
+            if (penetration > 0) {
+                const normal = displacement.clone().multiplyScalar(-1).normalize();
+                contacts.push({ displacement, normal, penetration, world: closest, center, triangle });
+            }
+        });
+
+        return contacts;
+    }
+}
+
 class KinematicGuy {
     constructor() {
-        this.radius = .25;
-        this.height = .8;
         this.gravity = 9;
         this.maxSlopeAngle = (Math.PI * .5) * .65;
         this.stepHeight = .6;
         this.jumpControl = .5;
-        this.maxVelocity = 20;
+        this.maxVelocity = 40;
 
         this.allowedPenetration = 0.01;
         this.upVector = new THREE.Vector3(0, 1, 0);
@@ -214,8 +213,9 @@ class KinematicGuy {
         this.lastStepUp = new THREE.Vector3();
         this.lastStepDown = new THREE.Vector3();
 
-        /** @type {PhysicsTriangle[]} */
-        this.triangles = [];
+        this.scene = new PhysicsScene();
+        this.capsule = new PhysicsCapsule(.25, .8);
+
         /** @type {PhysicsContact[]} */
         this.contacts = [];
         /** @type {Plane[]} */
@@ -231,14 +231,24 @@ class KinematicGuy {
      * @param {number} deltaTime
      */
     move(moveVelocity, jumpVelocity, deltaTime) {
+        // trying to understand...
+        // slide (finish early if blocked)
+        // if blocked:
+        //     try: step up (including step down)
+        //     else: finish slide
+        // if sliding from ground:
+        //     try: step down to ground 
+
         const targetMotion = moveVelocity.clone().multiplyScalar(deltaTime);
         const actualMotion = targetMotion.clone(); // ehhh
         const correction = new THREE.Vector3();
 
-        this.testPosition.copy(this.prevPosition);
+        this.traces = [];
 
         if (this.gravity === 0) {
             this.fly(targetMotion);
+            this.testPosition.copy(this.nextPosition);
+            this.updateContacts();
         } else {
             const climbing = this.isClimbing && this.jumpVelocity.y + this.gravityVelocity.y <= 0;
             const airborne = !this.hadGroundContact && !climbing && !this.isSteppingUp;
@@ -250,6 +260,8 @@ class KinematicGuy {
 
                 correction.copy(this.jumpVelocity).multiplyScalar(deltaTime);
                 targetMotion.add(correction); // ehhh
+
+                if (jumpVelocity > 0) console.log("JUMP FRAME", this.hadGroundContact, this.isSteppingUp)
             } else {
                 // TODO: jump control
 
@@ -284,27 +296,33 @@ class KinematicGuy {
                 }
             }
 
+            const prev = targetMotion.length();
             targetMotion.clampLength(0, this.maxVelocity * deltaTime);
+            const next = targetMotion.length();
+            if (Math.abs(prev - next) > .1) console.log(prev - next, targetMotion);
 
             this.testPosition.copy(this.prevPosition);
-            this.updateContacts(this.testPosition);
+            this.updateContacts();
 
             const stopAtObstacle = this.hadGroundContact || this.isSteppingUp;
             this.isSteppingUp = false;
+
             const blocked = !this.slide(targetMotion, stopAtObstacle);
 
             if (blocked) {
-                this.isSteppingUp = this.stepUp(targetMotion);
-                if (!this.isSteppingUp) { 
+                this.testPosition.copy(this.prevPosition);
+
+                this.isSteppingUp = jumpVelocity === 0 && this.stepUp(targetMotion);
+                if (!this.isSteppingUp) {
                     this.slide(targetMotion, false);
                 }
             }
 
-            const jumping = this.jumpVelocity.manhattanLength() > 0;
+            const jumping = this.jumpVelocity.manhattanLength() > 0 || jumpVelocity > 0;
             const grounded = this.hadGroundContact || this.isSteppingDown;
 
             if (!this.isSteppingUp && grounded && !jumping && !this.isClimbing) {
-                this.isSteppingDown = this.stepDown(!this.isSteppingDown);
+                this.isSteppingDown = this.stepDown(!this.isSteppingDown, "walking");
             } else {
                 this.isSteppingDown = false;
             }
@@ -323,6 +341,7 @@ class KinematicGuy {
             //     this.updateContacts(this.testPosition);
             // } 
 
+            this.updateContacts();
             this.hadGroundContact = this.hasGroundContact();
 
             actualMotion.subVectors(this.testPosition, this.prevPosition);
@@ -335,6 +354,8 @@ class KinematicGuy {
             // ehh
             this.nextPosition.copy(this.testPosition);
         }
+
+        this.prevPosition.copy(this.nextPosition);
     }
 
     fly(motion) {
@@ -345,25 +366,26 @@ class KinematicGuy {
         const targetMotion = motion;
         const actualMotion = targetMotion.clone();
 
-        this.testPosition.copy(this.prevPosition);
-        this.updateContacts(this.testPosition);
+        const prevPosition = this.prevPosition;
+        const nextPosition = this.prevPosition.clone().add(actualMotion);
+        
+        let contacts = this.scene.getCapsuleContacts(this.capsule, nextPosition);
+        let bounds = [];
 
         const correction = new THREE.Vector3();
 
         let solvedContacts = false;
-        this.bounds.length = 0;
         for (let i = 0; i < slideIterations && !solvedContacts; ++i) {
-            this.addBounds(this.testPosition);
+            this.addContactBounds(bounds, contacts, nextPosition);
 
-            let solvedBounds = this.bounds.length === 0;
+            let solvedBounds = bounds.length === 0;
             for (let j = 0; j < boundIterations && !solvedBounds; ++j) {
                 solvedBounds = true;
-                for (let bound of this.bounds) {
+                for (let bound of bounds) {
                     // ignore non-opposing bounds
                     if (bound.normal.dot(actualMotion) >= 0) continue;
 
                     // distance to plane..
-                    
                     const test = this.prevPosition.clone().add(actualMotion);
                     const distance = planePointDistance(bound, test);
                     const inside = distance + this.allowedPenetration < 0;
@@ -381,19 +403,17 @@ class KinematicGuy {
             const opposing = targetMotion.dot(actualMotion) <= 0;
             if (!solvedBounds || opposing) break;
 
-            this.testPosition.copy(this.prevPosition).add(actualMotion);
-            this.updateContacts(this.testPosition);
+            nextPosition.copy(prevPosition).add(actualMotion);
+            contacts = this.scene.getCapsuleContacts(this.capsule, nextPosition);
 
-            solvedContacts = !this.hasForbiddenContact(actualMotion);
+            solvedContacts = this.filterForbiddenContacts(contacts, actualMotion).length === 0;
         }
 
         if (!solvedContacts) {
-            this.nextPosition.copy(this.prevPosition);
+            this.nextPosition.copy(prevPosition);
         } else {
-            this.nextPosition.copy(this.testPosition);
+            this.nextPosition.copy(nextPosition);
         }
-
-        this.updateContacts(this.nextPosition);
     }
 
     /**
@@ -411,8 +431,7 @@ class KinematicGuy {
         const targetDirectionVertical = this.upVector.clone().multiplyScalar(this.upVector.dot(targetDirection));
         const targetDirectionHorizontal = targetMotion.clone().sub(targetDirectionVertical);
 
-        //this.testPosition.copy(this.prevPosition);
-        this.updateContacts(this.testPosition);
+        this.updateContacts();
 
         const correction = new THREE.Vector3();
 
@@ -478,7 +497,7 @@ class KinematicGuy {
             }
 
             this.testPosition.copy(this.prevPosition).add(actualMotion);
-            this.updateContacts(this.testPosition);
+            this.updateContacts();
 
             // was this a ground based movement that resulted in opposing motion?
             const opposingHorizontal = targetDirectionHorizontal.dot(actualMotion) <= -this.allowedPenetration;
@@ -500,6 +519,9 @@ class KinematicGuy {
             }
         }
 
+        this.updateContacts();
+        if (this.hasForbiddenContact()) return false;
+
         return !blocked;
     }
 
@@ -507,7 +529,8 @@ class KinematicGuy {
      * @param {THREE.Vector3} motion
      */
     stepUp(motion) {
-        const startPosition = this.testPosition.clone();
+        const prevPosition = this.testPosition;
+        const nextPosition = prevPosition.clone();
 
         const targetMotion = motion;
 
@@ -519,27 +542,28 @@ class KinematicGuy {
             return false;
         forward.normalize();
 
-        const forwardStepDistance = this.radius*.5 - 2 * this.allowedPenetration;
+        const forwardStepDistance = this.capsule.radius - 2 * this.allowedPenetration;
         const forwardStep = forward.clone().multiplyScalar(forwardStepDistance);
         const upwardStep = this.upVector.clone().multiplyScalar(this.stepHeight);
 
         // is there room to step up?
-        this.testPosition.add(forwardStep).add(upwardStep);
-        this.updateContacts(this.testPosition);
+        nextPosition.add(forwardStep).add(upwardStep);
+        const contacts = this.scene.getCapsuleContacts(this.capsule, nextPosition);
+        const blocked = this.filterForbiddenContacts(contacts).length > 0;
 
-        const blocked = this.hasForbiddenContact();
         if (!blocked) {
             // is there something to stand on?
-            const groundContact = this.stepDown(true);
+            this.testPosition.copy(nextPosition);
+            this.updateContacts();
+            const groundContact = this.stepDown(true, "step up");
             if (groundContact) {
-                this.lastStepUp.copy(this.testPosition);
                 return true;
             }
         }
 
         // couldn't step, rollback
-        this.testPosition.copy(startPosition);
-        this.updateContacts(this.testPosition);
+        this.testPosition.copy(prevPosition);
+        this.updateContacts();
 
         return false;
     }
@@ -548,10 +572,15 @@ class KinematicGuy {
      * @param {boolean} onlyOntoAllowedSlopes
      * @returns {boolean}
      */
-    stepDown(onlyOntoAllowedSlopes) {
+    stepDown(onlyOntoAllowedSlopes, source="none") {
         const slideIterations = 8;
         const boundIterations = 4;
 
+        if (this.hasForbiddenContact()) {
+            console.log("STEPPING DOWN BUT ALREADY FUCKED", source)
+        }
+
+        this.updateContacts();
         // we're already on the ground
         if (this.hasGroundContact())
             return true;
@@ -572,7 +601,9 @@ class KinematicGuy {
         let hasUnallowedContacts = false;
         let hasBottomContact = false;
         let foundAllowedSlope = false;
-        let bisect = true;
+        
+        // hmmmm not necessary???
+        let bisect = false;//true;
 
         this.bounds.length = 0;
         for (let i = 0; i < slideIterations && (hasUnallowedContacts || !hasBottomContact || (bisect && this.contacts.length === 0)); ++i) {
@@ -637,7 +668,7 @@ class KinematicGuy {
             }
 
             this.testPosition.copy(startPosition).add(actualMotion);
-            this.updateContacts(this.testPosition);
+            this.updateContacts();
 
             hasUnallowedContacts = this.hasForbiddenContact();
 
@@ -650,36 +681,24 @@ class KinematicGuy {
             }
         }
 
+        this.testPosition.copy(startPosition).add(actualMotion);
+        this.updateContacts();
+        hasUnallowedContacts = this.hasForbiddenContact();
+
         if (hasUnallowedContacts || !hasBottomContact || (onlyOntoAllowedSlopes && !foundAllowedSlope))
         {
             this.lastStepDown.copy(this.testPosition);
 
             this.testPosition.copy(startPosition);
-            this.updateContacts(this.testPosition);
+            this.updateContacts(); 
             return false;
         }
 
-        this.lastStepDown.copy(this.testPosition);
         return true;
     }
 
-    updateContacts(position) {
-        this.contacts.length = 0;
-
-        const A = position;
-        const B = this.upVector.clone().multiplyScalar(this.height-this.radius*2).add(position);
-
-        this.triangles.forEach((triangle) => {
-            const center = triangle.closestPointSegment(A, B);
-            const closest = triangle.closestPoint(center);
-            const displacement = closest.clone().sub(center);
-            const penetration = this.radius - displacement.length();
-
-            if (penetration > 0) {
-                const normal = displacement.clone().multiplyScalar(-1).normalize();
-                this.contacts.push({ displacement, normal, penetration, world: closest, center, triangle });
-            }
-        });
+    updateContacts() {
+        this.contacts = this.scene.getCapsuleContacts(this.capsule, this.testPosition);
     }
 
     /**
@@ -689,29 +708,38 @@ class KinematicGuy {
     {
         const stationary = motion.manhattanLength() == 0;
 
-        for (let i = 0; i < this.contacts.length; ++i) {
-            const contact = this.contacts[i];
-            const opposing = motion.dot(contact.normal) < 0;
+        return this.contacts.some((contact) => {
+            const opposing = stationary || motion.dot(contact.normal) < 0;
             const inside = contact.penetration > this.allowedPenetration + 0.001;
+            return inside && opposing;
+        });
+    }
 
-            if ((stationary || opposing) && inside) return true;
-        }
+    /**
+     * @param {PhysicsContact[]} contacts
+     * @param {THREE.Vector3} motion
+     */
+    filterForbiddenContacts(contacts, motion = new THREE.Vector3(0, 0, 0)) {
+        const stationary = motion.manhattanLength() == 0;
 
-        return false;
+        return contacts.filter((contact) => {
+            const opposing = stationary || motion.dot(contact.normal) < 0;
+            const inside = contact.penetration > this.allowedPenetration + 0.001;
+            return inside && opposing;
+        });
     }
 
     hasGroundContact() {
-        const maxDisplacement = -this.radius * Math.cos(this.maxSlopeAngle);
-
-        this.groundContacts.length = 0;
-        for (const contact of this.contacts) {
-            if (contact.displacement.y <= maxDisplacement) {
-                this.groundContacts.push(contact);
-                //console.log(maxDisplacement, contact.displacement.y);
-            }
-        }
-
+        this.groundContacts = this.filterGroundContacts(this.contacts);
         return this.groundContacts.length > 0;
+    }
+
+    /**
+     * @param {PhysicsContact[]} contacts
+     */
+    filterGroundContacts(contacts) {
+        const maxDisplacement = -this.capsule.radius * Math.cos(this.maxSlopeAngle);
+        return contacts.filter((contact) => contact.displacement.y <= maxDisplacement);
     }
 
     /**
@@ -725,9 +753,18 @@ class KinematicGuy {
      * @param {THREE.Vector3} position
      */
     addBounds(position) {
+        this.addContactBounds(this.bounds, this.contacts, position);
+    }
+
+    /**
+     * @param {Plane[]} bounds
+     * @param {PhysicsContact[]} contacts
+     * @param {THREE.Vector3} position
+     */
+    addContactBounds(bounds, contacts, position) {
         const point = new THREE.Vector3();
 
-        this.contacts.forEach((contact) => {
+        contacts.forEach((contact) => {
             point.copy(contact.normal);
             point.multiplyScalar(contact.penetration);
             point.add(position);
@@ -737,15 +774,20 @@ class KinematicGuy {
                 distance: contact.normal.dot(point),
             };
 
-            // TODO: ignore duplicates
+            const exists = bounds.some((bound) => {
+                return bound.distance === plane.distance
+                    && bound.normal.equals(plane.normal);
+            });
             
+            if (exists) return;
+
             // arrange bounds so walls are always solved before ramps
             const wall = this.isAllowedSlope(plane.normal);
 
             if (wall) {
-                this.bounds.splice(0, 0, plane);
+                bounds.splice(0, 0, plane);
             } else {
-                this.bounds.push(plane);
+                bounds.push(plane);
             }
         });
     }
