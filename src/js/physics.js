@@ -60,7 +60,8 @@ class PhysicsTriangle {
         const t = this.plane.normal.dot(p);
         const i = A.clone().addScaledVector(segmentNormal, t);
 
-        const closest = this.closestPointToPoint(i);
+        const closest = new THREE.Vector3();
+        this.triangle.closestPointToPoint(i, closest);
         _line.set(A, B);
         _line.closestPointToPoint(closest, true, closest);
 
@@ -212,9 +213,7 @@ class KinematicGuy {
                 }
             }
 
-            const prev = targetMotion.length();
             targetMotion.clampLength(0, this.maxVelocity * deltaTime);
-            const next = targetMotion.length();
 
             this.testPosition.copy(this.prevPosition);
             this.updateContacts();
@@ -235,6 +234,10 @@ class KinematicGuy {
 
             const jumping = this.jumpVelocity.manhattanLength() > 0 || jumpVelocity > 0;
             const grounded = this.hadGroundContact || this.isSteppingDown;
+
+            if (this.testPosition.manhattanDistanceTo(this.prevPosition) > 100) {
+                console.log("FUCKED BEFORE DOWN")
+            }
 
             if (!this.isSteppingUp && grounded && !jumping && !this.isClimbing) {
                 this.isSteppingDown = this.stepDown(!this.isSteppingDown, "walking");
@@ -408,6 +411,7 @@ class KinematicGuy {
 
             if (!solvedBounds) {
                 // V issue
+                console.log("V ISSUE?")
             }
 
             this.testPosition.copy(this.prevPosition).add(actualMotion);
@@ -510,8 +514,6 @@ class KinematicGuy {
 
         this.testPosition.copy(startPosition).add(actualMotion);
 
-        const correction = new THREE.Vector3();
-
         let hasUnallowedContacts = false;
         let hasBottomContact = false;
         let foundAllowedSlope = false;
@@ -527,7 +529,7 @@ class KinematicGuy {
             for (let j = 0; j < boundIterations && !solvedBounds; ++j) {
                 solvedBounds = true;
                 for (let bound of this.bounds) {
-                    // ignore downwards bounds
+                    // ignore downwards bounds (really steep walls are a problem...)
                     if (bound.normal.dot(this.upVector) <= 0) continue;
 
                     // distance to plane..
@@ -541,11 +543,18 @@ class KinematicGuy {
                     }
 
                     if (inside) {
+                        // something fucky here: the more vertical the bound,
+                        // the huger the correction.. i'll clamp for now
+
                         // depentrate vertically only
                         const d = -distance / this.upVector.dot(bound.normal);
-                        correction.copy(this.upVector).multiplyScalar(d);
                         
-                        actualMotion.add(correction);
+                        if (d <= 0.01) {
+                            actualMotion.addScaledVector(this.upVector, d);
+                        } else {
+                            actualMotion.addScaledVector(bound.normal, -distance);
+                        }
+
                         this.testPosition.copy(startPosition).add(actualMotion);
 
                         solvedBounds = false;
@@ -624,7 +633,7 @@ class KinematicGuy {
 
         return this.contacts.some((contact) => {
             const opposing = stationary || motion.dot(contact.normal) < 0;
-            const inside = contact.penetration > this.allowedPenetration + 0.001;
+            const inside = contact.penetration > this.allowedPenetration;
             return inside && opposing;
         });
     }
@@ -638,7 +647,7 @@ class KinematicGuy {
 
         return contacts.filter((contact) => {
             const opposing = stationary || motion.dot(contact.normal) < 0;
-            const inside = contact.penetration > this.allowedPenetration + 0.001;
+            const inside = contact.penetration > this.allowedPenetration;
             return inside && opposing;
         });
     }
