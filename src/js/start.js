@@ -638,7 +638,12 @@ void main() {
             kinematic.prevPosition.copy(kinematic.nextPosition);
         }
 
-        debug.textContent = `iterations: ${split}`;
+        /** @param {THREE.Vector3} vector */
+        function vec2str(vector) {
+            return `${vector.x.toPrecision(2)},${vector.y.toPrecision(2)},${vector.z.toPrecision(2)}`
+        }
+
+        debug.textContent = `iterations: ${split} // pos: ${vec2str(kinematic.prevPosition)}`;
 
         guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
         guy.position.multiplyScalar(.5);

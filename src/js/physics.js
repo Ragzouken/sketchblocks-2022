@@ -1,10 +1,4 @@
 /**
- * @typedef {Object} Plane
- * @property {THREE.Vector3} normal
- * @property {number} distance
- */
-
-/**
  * @typedef {Object} PhysicsContact
  * @property {THREE.Vector3} displacement
  * @property {THREE.Vector3} normal
@@ -13,22 +7,6 @@
  * @property {PhysicsTriangle} triangle
  * @property {number} penetration
  */
-
-function makePlane() {
-    return {
-        normal: new THREE.Vector3(),
-        distance: 0,
-    }
-}
-
-/**
- * @param {Plane} plane
- * @param {THREE.Vector3} point
- * @returns {number}
- */
-function planePointDistance(plane, point) {
-    return plane.normal.dot(point) - plane.distance;
-}
 
 /**
  * @param {THREE.Vector3} l0
@@ -40,7 +18,7 @@ function closestPointLine(l0, l1, p) {
     let t = p.clone().sub(l0).dot(v) / v.dot(v);
     t = Math.max(t, 0);
     t = Math.min(t, 1);
-    return v.multiplyScalar(t).add(l0);
+    return l0.clone().addScaledVector(v, t);
 }
 
 class PhysicsCapsule {
@@ -67,73 +45,17 @@ class PhysicsTriangle {
         this.p1 = p1.clone();
         this.p2 = p2.clone();
 
-        const p10 = p1.clone().sub(p0);
-        const p20 = p2.clone().sub(p0);
-
-        this.plane = makePlane();
-        this.plane.normal.copy(p10).cross(p20).normalize();
-        this.plane.distance = this.plane.normal.dot(p0);
-
         this.triangle = new THREE.Triangle(p0, p1, p2);
-    }
-
-    /** 
-     * @param {THREE.Vector3} point
-     * @returns {boolean}
-     */
-    contains(point) {
-        // almost understand this.. something along the lines of winding order
-        // of vertices encircling test point
-
-        // vectors from test point to vertices
-        const a = this.p0.clone().sub(point);
-        const b = this.p1.clone().sub(point);
-        const c = this.p2.clone().sub(point);
-
-        // normals
-        const normPBC = b.clone().cross(c);
-        const normPCA = c.clone().cross(a);
-        const normPAB = a.clone().cross(b);
-
-        // do all the normals point in the same direction?
-        const test1 = normPBC.dot(normPAB) > 0;
-        const test2 = normPBC.dot(normPCA) > 0;
-
-        return test1 && test2;
+        this.plane = this.triangle.getPlane(new THREE.Plane());
     }
     
     /**
      * @param {THREE.Vector3} point
      * @returns {THREE.Vector3}
      */
-    closestPoint(point) {
+    closestPointToPoint(point) {
         const closest = new THREE.Vector3();
         return this.triangle.closestPointToPoint(point, closest);
-
-        // closest on plane
-        closest.copy(this.plane.normal);
-        closest.multiplyScalar(this.plane.normal.dot(point) - this.plane.distance);
-        closest.subVectors(point, closest);
-
-        if (this.contains(closest)) return closest;
-    
-        // closest point on each edge
-        const c1 = closestPointLine(this.p0, this.p1, closest); // Line AB
-        const c2 = closestPointLine(this.p1, this.p2, closest); // Line BC
-        const c3 = closestPointLine(this.p2, this.p0, closest); // Line CA
-    
-        // pick closest of those
-        const l1 = closest.clone().sub(c1).lengthSq();
-        const l2 = closest.clone().sub(c2).lengthSq();
-        const l3 = closest.clone().sub(c3).lengthSq();
-    
-        if (l1 < l2 && l1 < l3) {
-            return c1;
-        } else if (l2 < l1 && l2 < l3) {
-            return c2;
-        } else {
-            return c3;
-        }
     }
 
     /**
@@ -141,9 +63,8 @@ class PhysicsTriangle {
      * @param {THREE.Vector3} B
      * @returns {THREE.Vector3}
      */
-    closestPointSegment(A, B) {
+    closestPointToSegment(A, B) {
         const capsuleNormal = B.clone().sub(A).normalize();
-
         const a = this.plane.normal.dot(capsuleNormal);
 
         if (a === 0) 
@@ -151,9 +72,9 @@ class PhysicsTriangle {
 
         const p = this.p0.clone().sub(A).divideScalar(a);
         const t = this.plane.normal.dot(p);
-        const i = capsuleNormal.clone().multiplyScalar(t).add(A);
+        const i = A.clone().addScaledVector(capsuleNormal, t);
 
-        const c1 = this.closestPoint(i);
+        const c1 = this.closestPointToPoint(i);
         const c2 = closestPointLine(A, B, c1);
 
         return c2;
@@ -162,6 +83,7 @@ class PhysicsTriangle {
 
 class PhysicsScene {
     constructor() {
+        /** @type {PhysicsTriangle[]} */
         this.triangles = [];
     }
 
@@ -176,14 +98,21 @@ class PhysicsScene {
         const B = position.clone().addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
 
         this.triangles.forEach((triangle) => {
-            const center = triangle.closestPointSegment(A, B);
-            const closest = triangle.closestPoint(center);
+            const center = triangle.closestPointToSegment(A, B);
+            const closest = triangle.closestPointToPoint(center);
             const displacement = closest.clone().sub(center);
             const penetration = capsule.radius - displacement.length();
 
             if (penetration > 0) {
                 const normal = displacement.clone().multiplyScalar(-1).normalize();
-                contacts.push({ displacement, normal, penetration, world: closest, center, triangle });
+                contacts.push({ 
+                    displacement, 
+                    normal, 
+                    penetration, 
+                    world: closest, 
+                    center, 
+                    triangle,
+                });
             }
         });
 
@@ -221,7 +150,7 @@ class KinematicGuy {
 
         /** @type {PhysicsContact[]} */
         this.contacts = [];
-        /** @type {Plane[]} */
+        /** @type {THREE.Plane[]} */
         this.bounds = [];
 
         /** @type {PhysicsContact[]} */
@@ -452,7 +381,7 @@ class KinematicGuy {
                     if (bound.normal.dot(actualMotion) >= 0) continue;
 
                     // distance to plane..
-                    const distance = planePointDistance(bound, this.testPosition);
+                    const distance = bound.distanceToPoint(this.testPosition);
                     const inside = distance + this.allowedPenetration < 0;
 
                     if (inside) {
@@ -615,7 +544,7 @@ class KinematicGuy {
                     if (bound.normal.dot(this.upVector) <= 0) continue;
 
                     // distance to plane..
-                    const distance = planePointDistance(bound, this.testPosition) + this.allowedPenetration;
+                    const distance = bound.distanceToPoint(this.testPosition) + this.allowedPenetration;
                     const inside = distance < 0;
 
                     // dunno
@@ -755,7 +684,7 @@ class KinematicGuy {
     }
 
     /**
-     * @param {Plane[]} bounds
+     * @param {THREE.Plane[]} bounds
      * @param {PhysicsContact[]} contacts
      * @param {THREE.Vector3} position
      */
@@ -763,20 +692,9 @@ class KinematicGuy {
         const point = new THREE.Vector3();
 
         contacts.forEach((contact) => {
-            point.copy(contact.normal);
-            point.multiplyScalar(contact.penetration);
-            point.add(position);
-
-            const plane = {
-                normal: contact.normal,
-                distance: contact.normal.dot(point),
-            };
-
-            const exists = bounds.some((bound) => {
-                return bound.distance === plane.distance
-                    && bound.normal.equals(plane.normal);
-            });
-            
+            point.copy(position).addScaledVector(contact.normal, contact.penetration);
+            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(contact.normal, point);
+            const exists = bounds.some((bound) => plane.equals(bound));            
             if (exists) return;
 
             // arrange bounds so walls are always solved before ramps
