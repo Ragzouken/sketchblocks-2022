@@ -606,29 +606,21 @@ void main() {
         for (let i = 0; i < split; ++i)
             kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
+        /**
+         * @param {number[]} target
+         * @param {THREE.Vector3} vector
+         */
+        function pushVector(target, vector) {
+            target.push(vector.x, vector.y, vector.z);
+        }
+
         kinematic.contacts.forEach((contact) => {
-            // const origin = contact.center;
-            // const point = contact.world;
-
-            // pointsVerts.push(
-            //     origin.x, origin.y, origin.z,
-            //     point.x, point.y, point.z,
-            // );
-
-            pointsVerts.push(
-                contact.triangle.p0.x, contact.triangle.p0.y, contact.triangle.p0.z,
-                contact.triangle.p1.x, contact.triangle.p1.y, contact.triangle.p1.z,
-            );
-
-            pointsVerts.push(
-                contact.triangle.p1.x, contact.triangle.p1.y, contact.triangle.p1.z,
-                contact.triangle.p2.x, contact.triangle.p2.y, contact.triangle.p2.z,
-            );
-
-            pointsVerts.push(
-                contact.triangle.p0.x, contact.triangle.p0.y, contact.triangle.p0.z,
-                contact.triangle.p2.x, contact.triangle.p2.y, contact.triangle.p2.z,
-            );
+            pushVector(pointsVerts, contact.triangle.triangle.a);
+            pushVector(pointsVerts, contact.triangle.triangle.b);
+            pushVector(pointsVerts, contact.triangle.triangle.b);
+            pushVector(pointsVerts, contact.triangle.triangle.c);
+            pushVector(pointsVerts, contact.triangle.triangle.c);
+            pushVector(pointsVerts, contact.triangle.triangle.a);
         });
 
         guy.material.map = kinematic.hadGroundContact ? guyTex : guyFallTex;

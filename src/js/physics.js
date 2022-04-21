@@ -41,10 +41,6 @@ class PhysicsTriangle {
      * @param {THREE.Vector3} p2
      */
     constructor(p0, p1, p2) {
-        this.p0 = p0.clone();
-        this.p1 = p1.clone();
-        this.p2 = p2.clone();
-
         this.triangle = new THREE.Triangle(p0, p1, p2);
         this.plane = this.triangle.getPlane(new THREE.Plane());
     }
@@ -64,15 +60,16 @@ class PhysicsTriangle {
      * @returns {THREE.Vector3}
      */
     closestPointToSegment(A, B) {
-        const capsuleNormal = B.clone().sub(A).normalize();
-        const a = this.plane.normal.dot(capsuleNormal);
+        const segmentNormal = B.clone().sub(A).normalize();
+        const a = this.plane.normal.dot(segmentNormal);
 
+        // segment parallel to triangle
         if (a === 0) 
             return A.clone();
 
-        const p = this.p0.clone().sub(A).divideScalar(a);
+        const p = this.triangle.a.clone().sub(A).divideScalar(a);
         const t = this.plane.normal.dot(p);
-        const i = A.clone().addScaledVector(capsuleNormal, t);
+        const i = A.clone().addScaledVector(segmentNormal, t);
 
         const c1 = this.closestPointToPoint(i);
         const c2 = closestPointLine(A, B, c1);
