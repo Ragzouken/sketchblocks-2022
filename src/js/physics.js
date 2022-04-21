@@ -8,19 +8,6 @@
  * @property {number} penetration
  */
 
-/**
- * @param {THREE.Vector3} l0
- * @param {THREE.Vector3} l1
- * @param {THREE.Vector3} p
- */
-function closestPointLine(l0, l1, p) { 
-    const v = l1.clone().sub(l0);
-    let t = p.clone().sub(l0).dot(v) / v.dot(v);
-    t = Math.max(t, 0);
-    t = Math.min(t, 1);
-    return l0.clone().addScaledVector(v, t);
-}
-
 class PhysicsCapsule {
     /**
      * @param {number} radius
@@ -33,6 +20,8 @@ class PhysicsCapsule {
         this.up = up;
     }
 }
+
+const _line = new THREE.Line3();
 
 class PhysicsTriangle {
     /**
@@ -71,10 +60,11 @@ class PhysicsTriangle {
         const t = this.plane.normal.dot(p);
         const i = A.clone().addScaledVector(segmentNormal, t);
 
-        const c1 = this.closestPointToPoint(i);
-        const c2 = closestPointLine(A, B, c1);
+        const closest = this.closestPointToPoint(i);
+        _line.set(A, B);
+        _line.closestPointToPoint(closest, true, closest);
 
-        return c2;
+        return closest;
     }
 }
 
