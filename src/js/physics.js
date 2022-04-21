@@ -73,6 +73,8 @@ class PhysicsTriangle {
         this.plane = makePlane();
         this.plane.normal.copy(p10).cross(p20).normalize();
         this.plane.distance = this.plane.normal.dot(p0);
+
+        this.triangle = new THREE.Triangle(p0, p1, p2);
     }
 
     /** 
@@ -106,6 +108,7 @@ class PhysicsTriangle {
      */
     closestPoint(point) {
         const closest = new THREE.Vector3();
+        return this.triangle.closestPointToPoint(point, closest);
 
         // closest on plane
         closest.copy(this.plane.normal);
@@ -170,7 +173,7 @@ class PhysicsScene {
         const contacts = [];
 
         const A = position;
-        const B = capsule.up.clone().multiplyScalar(capsule.height - capsule.radius * 2).add(position);
+        const B = position.clone().addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
 
         this.triangles.forEach((triangle) => {
             const center = triangle.closestPointSegment(A, B);
@@ -194,7 +197,7 @@ class KinematicGuy {
         this.maxSlopeAngle = (Math.PI * .5) * .65;
         this.stepHeight = .6;
         this.jumpControl = .5;
-        this.maxVelocity = 40;
+        this.maxVelocity = 10;
 
         this.allowedPenetration = 0.01;
         this.upVector = new THREE.Vector3(0, 1, 0);
@@ -260,8 +263,6 @@ class KinematicGuy {
 
                 correction.copy(this.jumpVelocity).multiplyScalar(deltaTime);
                 targetMotion.add(correction); // ehhh
-
-                if (jumpVelocity > 0) console.log("JUMP FRAME", this.hadGroundContact, this.isSteppingUp)
             } else {
                 // TODO: jump control
 
@@ -283,8 +284,7 @@ class KinematicGuy {
                     const lastGravity = this.gravityVelocity.clone();
 
                     // v' = v + g∙t
-                    correction.copy(this.upVector).multiplyScalar(-this.gravity * deltaTime);
-                    this.gravityVelocity.add(correction);
+                    this.gravityVelocity.addScaledVector(this.upVector, -this.gravity * deltaTime);
 
                     if (this.gravityVelocity.lengthSq() > this.maxVelocity * this.maxVelocity)
                         this.gravityVelocity.clampLength(0, this.maxVelocity);
@@ -299,7 +299,6 @@ class KinematicGuy {
             const prev = targetMotion.length();
             targetMotion.clampLength(0, this.maxVelocity * deltaTime);
             const next = targetMotion.length();
-            if (Math.abs(prev - next) > .1) console.log(prev - next, targetMotion);
 
             this.testPosition.copy(this.prevPosition);
             this.updateContacts();
@@ -358,6 +357,9 @@ class KinematicGuy {
         this.prevPosition.copy(this.nextPosition);
     }
 
+    /**
+     * @param {THREE.Vector3} motion
+     */
     fly(motion) {
         const slideIterations = 4;
         const boundIterations = 4;
@@ -371,8 +373,6 @@ class KinematicGuy {
         
         let contacts = this.scene.getCapsuleContacts(this.capsule, nextPosition);
         let bounds = [];
-
-        const correction = new THREE.Vector3();
 
         let solvedContacts = false;
         for (let i = 0; i < slideIterations && !solvedContacts; ++i) {
@@ -392,9 +392,7 @@ class KinematicGuy {
 
                     if (inside) {
                         // update motion
-                        correction.copy(bound.normal).multiplyScalar(-distance)
-                        actualMotion.add(correction);
-
+                        actualMotion.addScaledVector(bound.normal, -distance);
                         solvedBounds = false;
                     }
                 }
@@ -590,7 +588,7 @@ class KinematicGuy {
             return true;
 
         const startPosition = this.testPosition.clone();
-        const targetMotion = this.upVector.clone().multiplyScalar(-this.stepHeight);
+        const targetMotion = this.upVector.clone().multiplyScalar(-this.stepHeight*.6);
         const actualMotion = targetMotion.clone();
         const safeMotion = new THREE.Vector3();
 
