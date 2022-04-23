@@ -52,6 +52,11 @@ attribute vec4 faceOrients1;
 varying vec3 vColor;
         `.trim(),
     );
+    
+    shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>", 
+        "#include <begin_vertex>; transformed -= normal * 0.001;",
+    );
 
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
 vec4 mvPosition = vec4(transformed, 1.0);

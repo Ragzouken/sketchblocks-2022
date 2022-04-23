@@ -157,25 +157,25 @@ const slab =
 
 const leveldata = {
     blocks: [
-        ["ramp", [ 0, -1,  1], [1, 2]],
-        ["ramp", [-1, -1,  1], [-1, 0]],
-        ["ramp", [-1, -1,  0], [0, 2]],
+        ["ramp", [ 0, -1,  1], 14],
+        ["ramp", [-1, -1,  1], 11],
+        ["ramp", [-1, -1,  0], 5],
 
         ["cube", [-1,  0,  0]],
         ["cube", [ 0,  0,  0]],
         ["cube", [ 1,  0,  0]],
-        ["slab", [ 1,  0, -1], [0, 2]],
-        ["slab", [ 0,  0,  1]],
-        ["slab", [ 1,  0,  1]],
+        ["slab", [ 1,  0, -1], 12],
+        ["slab", [ 0,  0,  1], 8],
+        ["slab", [ 1,  0,  1], 8],
 
         ["cube", [-1,  1,  0]],
-        ["ramp", [ 0,  1,  0], [1, 0]],
-        ["ramp", [-1,  1, -1], [0, 2]],
+        ["ramp", [ 0,  1,  0], 10],
+        ["ramp", [-1,  1, -1], 13],
 
         ["cube", [-1,  2, -1]],
-        ["ramp", [ 0,  2, -1], [1, 2]],
+        ["ramp", [ 0,  2, -1], 14],
 
-        ["slab", [ 0,  3, -1]],
+        ["slab", [ 0,  3, -1], 8],
     ],
 
     sprites: [
@@ -346,40 +346,47 @@ async function start() {
     scene.add(cubes.mesh);
 
     const ramps = new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount);
-    // scene.add(ramps.mesh);
+    scene.add(ramps.mesh);
 
-    for (let i = 0; i < cubeCount; ++i) {
-        const position = new THREE.Vector3(
-            THREE.MathUtils.randInt(-15, 15),
-            THREE.MathUtils.randInt(-15, 15),
-            THREE.MathUtils.randInt(-15, 15),
-        );
-
-        cubes.setPositionAt(i, position);
-        cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255), 0);
-
-        const position2 = new THREE.Vector3(
-            THREE.MathUtils.randInt(-8, 8),
-            THREE.MathUtils.randInt(-8, 8),
-            THREE.MathUtils.randInt(-8, 8),
-        );
-        ramps.setPositionAt(i, position2);
-        ramps.setRotationAt(i, 0);
-        //THREE.MathUtils.randInt(0, 255)
-        ramps.setTilesAt(i, 0, 0);
+    const renderers = {
+        cube: cubes, ramp: ramps,
+        slab: new BlockShapeInstances(geometries.slab, blockMaterial, cubeCount),
     }
 
-    for (let y = 0; y < 16; ++y) {
-        for (let x = 0; x < 16; ++x) {
-            cubes.setPositionAt(y * 16 + x, new THREE.Vector3(x, 0, y));
-            for (let f = 0; f < 8; ++f) {
-                cubes.setTileAt(y * 16 + x, f, 10, THREE.MathUtils.randInt(0, 7));
-            }
-        }
-    }
+    scene.add(renderers.slab.mesh);
 
-    cubes.update();
-    ramps.update();
+    // for (let i = 0; i < cubeCount; ++i) {
+    //     const position = new THREE.Vector3(
+    //         THREE.MathUtils.randInt(-15, 15),
+    //         THREE.MathUtils.randInt(-15, 15),
+    //         THREE.MathUtils.randInt(-15, 15),
+    //     );
+
+    //     cubes.setPositionAt(i, position);
+    //     cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255), 0);
+
+    //     const position2 = new THREE.Vector3(
+    //         THREE.MathUtils.randInt(-8, 8),
+    //         THREE.MathUtils.randInt(-8, 8),
+    //         THREE.MathUtils.randInt(-8, 8),
+    //     );
+    //     ramps.setPositionAt(i, position2);
+    //     ramps.setRotationAt(i, 0);
+    //     //THREE.MathUtils.randInt(0, 255)
+    //     ramps.setTilesAt(i, 0, 0);
+    // }
+
+    // for (let y = 0; y < 16; ++y) {
+    //     for (let x = 0; x < 16; ++x) {
+    //         cubes.setPositionAt(y * 16 + x, new THREE.Vector3(x, 0, y));
+    //         for (let f = 0; f < 8; ++f) {
+    //             cubes.setTileAt(y * 16 + x, f, 10, THREE.MathUtils.randInt(0, 7));
+    //         }
+    //     }
+    // }
+
+    // cubes.update();
+    // ramps.update();
 
     const orbs = new THREE.InstancedMesh(geometries.quad, test, 128);
     orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -445,27 +452,28 @@ async function start() {
     /** @type {THREE.Mesh[]} */
     const blocks = [];
 
+    renderers.cube.count = 0;
+    renderers.ramp.count = 0;
+    renderers.slab.count = 0;
+
     leveldata.blocks.forEach((block, i) => {
-        const [type, position, rotation = [0, 0]] = block;
+        const [type, position, rotation = 0] = block;
 
-        const material = test.clone();
-        material.map = crateTex;
-        material.onBeforeCompile = shaderChanger;
-        const color = new THREE.Color(colors[(i+6) % 6]);
-
-        material.color = color;
-
-        const ry = rotation[0] * Math.PI / 2;
-        const rx = rotation[1] * Math.PI / 2;
-
-        const cube = new THREE.Mesh(geometries[type], material);
+        const cube = new THREE.Mesh(geometries[type], test);
         cube.position.set(...position);
-        cube.rotation.set(rx, ry, 0);
+        cube.rotation.setFromRotationMatrix(cubeOrientations[rotation]);
         
         cube.name = "block";
 
         level.add(cube);
         blocks.push(cube);
+
+        cube.visible = false;
+        const renderer = renderers[type];
+        const index = renderer.count++;
+        renderer.setPositionAt(index, cube.position);
+        renderer.setRotationAt(index, rotation);
+        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255));
     });
 
     /** @type {THREE.Mesh[]} */
@@ -591,10 +599,10 @@ async function start() {
             //     THREE.MathUtils.randInt(0, 23),
             // );
 
-            cubes.setTileAt(
-                THREE.MathUtils.randInt(0, cubeCount),
-                0, 10, THREE.MathUtils.randInt(0, 7),
-            );
+            // cubes.setTileAt(
+            //     THREE.MathUtils.randInt(0, cubeCount),
+            //     THREE.MathUtils.randInt(0, 7), 10, THREE.MathUtils.randInt(0, 7),
+            // );
         }
         cubes.update();
         ramps.update();
@@ -688,7 +696,7 @@ async function start() {
             for (let i = 0; i < split; ++i)
                 kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        if (false) {
+        if (true) {
             kinematic.contacts.forEach((contact) => {
                 pushVector(pointsVerts, contact.triangle.triangle.a);
                 pushVector(pointsVerts, contact.triangle.triangle.b);
@@ -707,6 +715,8 @@ async function start() {
         if (kinematic.nextPosition.y < -5) {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
+            guy.position.copy(kinematic.prevPosition).y += (.5 - kinematic.capsule.radius);
+            pivot.position.copy(guy.position);
         }
 
         /** @param {THREE.Vector3} vector */
