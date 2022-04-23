@@ -29,16 +29,16 @@ const tileDefines = `
 uniform float tileScale;
 uniform int[16] D2Lookup;
 
-vec2 mapFace(vec2 uv, int orientation) {
+vec2 mapTile(vec2 uv, int tile, int orientation) {
     vec4 components = vec4(uv.x, uv.y, 1.0 - uv.x, 1.0 - uv.y);
     int xi = D2Lookup[orientation * 2 + 0];
     int yi = D2Lookup[orientation * 2 + 1];
-    return vec2(components[xi], components[yi]);
-}
-
-vec2 mapTile(vec2 uv, float tile) {
-    uv += vec2(mod(tile, 16.0), floor(tile / 16.0));
+    uv = vec2(components[xi], components[yi]);
+    
+    float t = float(tile);
+    uv += vec2(mod(t, 16.0), floor(t / 16.0));
     uv *= tileScale;
+
     return uv;
 }
 `;
@@ -61,20 +61,34 @@ attribute vec4 faceTiles0;
 attribute vec4 faceTiles1;
 attribute vec4 faceOrients0;
 attribute vec4 faceOrients1;
+
+vec2 getTileData() {
+    float faceIndex = uvSpecial.z;
+    vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
+    vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
+
+    int index = int(mod(faceIndex, 4.0));
+    float tileIndex = faceTiles[index];
+    float rotIndex = faceRots[index];
+
+    return vec2(tileIndex, rotIndex);
+}
 `;
 
-const blockTileUVs = `
+const quadTileDefines = tileDefines + `
+attribute vec3 instancePosition;
+attribute vec3 instanceAxis;
+attribute vec2 instanceTile;
+
+vec2 getTileData() {
+    return instanceTile;
+}
+`;
+
+const tileUVs = `
     #ifdef USE_UV
-        float faceIndex = uvSpecial.z;
-        vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
-        vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
-
-        int index = int(mod(faceIndex, 4.0));
-        float tileIndex = faceTiles[index];
-        int rotIndex = int(faceRots[index]);
-
-        vUv = mapFace(uvSpecial.xy, rotIndex);
-        vUv = mapTile(vUv, tileIndex);
+        vec2 tile = getTileData();
+        vUv = mapTile(uvSpecial.xy, int(tile.x), int(tile.y));
     #endif
 `;
 
@@ -88,7 +102,7 @@ function blockShapeShaderFixer(shader) {
 
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
 ` + blockTileDefines);
-    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", blockTileUVs);
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", tileUVs);
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
 vec4 mvPosition = vec4(transformed, 1.0);
 mat4 blockMatrix = mapCube(instanceOrientation.xyz, int(instanceOrientation.w));
@@ -102,18 +116,33 @@ mvPosition.xyz -= normal * clamp(offset, 0.0, 1.0) * 0.001;
 gl_Position = combined * mvPosition;
         `.trim(),
     );
+};
 
-//     shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `
-// varying vec3 vColor;
-// #include <common>
-//         `.trim(),
-//     );
+/** 
+ * @param {THREE.Shader} shader
+ */
+ function billboardShaderFixer(shader) {
+    shader.uniforms.tileScale = { value: 1/16 };
+    shader.uniforms.D2Lookup = { value: D2Lookup };
 
-//     shader.fragmentShader = shader.fragmentShader.replace("#include <output_fragment>", `
-// #include <output_fragment>
-// gl_FragColor *= vec4(vColor, 1.0);
-//         `.trim(),
-//     );
+    shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
+` + quadTileDefines);
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", `
+    #ifdef USE_UV
+        vec2 tile = getTileData();
+        vUv = mapTile(uv, int(tile.x), int(tile.y));
+    #endif
+`);
+    shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
+vec4 mvPosition = vec4(inverse(mat3(viewMatrix)) * transformed, 1.0);
+mat4 quadMatrix = mat4(1.0);
+quadMatrix[3].xyz = instancePosition;
+
+mat4 combined = projectionMatrix * modelViewMatrix * quadMatrix;
+
+gl_Position = combined * mvPosition;
+        `.trim(),
+    );
 };
 
 const _matrix = new THREE.Matrix4();
@@ -126,6 +155,9 @@ class BlockShapeInstances {
      * @param {number} count
      */
     constructor(geometry, material, count) {
+        material = material.clone();
+        material.onBeforeCompile = blockShapeShaderFixer;
+
         this.orientation = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
         this.orientation.setUsage(THREE.DynamicDrawUsage);
 
@@ -220,5 +252,59 @@ class BlockShapeInstances {
         this.faceOrients1.needsUpdate = true;
         this.faceTiles0.needsUpdate = true;
         this.faceTiles1.needsUpdate = true;
+    }
+}
+
+class BillboardInstances {
+    /**
+     * @param {THREE.BufferGeometry} geometry
+     * @param {THREE.Material} material
+     * @param {number} count
+     */
+    constructor(geometry, material, count) {
+        material = material.clone();
+        material.onBeforeCompile = billboardShaderFixer;
+
+        this.position = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.position.setUsage(THREE.DynamicDrawUsage);
+
+        this.axis = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.axis.setUsage(THREE.DynamicDrawUsage);
+        
+        this.tile = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
+        this.tile.setUsage(THREE.DynamicDrawUsage);
+
+        this.mesh = new THREE.InstancedMesh(geometry.clone(), material, count);
+        this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        this.mesh.geometry.setAttribute("instancePosition", this.position);
+        this.mesh.geometry.setAttribute("instanceAxis", this.axis);
+        this.mesh.geometry.setAttribute("instanceTile", this.tile);
+    }
+
+    set count(value) { this.mesh.count = value; }
+    get count() { return this.mesh.count; }
+
+    /**
+     * @param {number} index
+     * @param {THREE.Vector3} position
+     */
+    setPositionAt(index, position) {
+        this.position.setXYZ(index, position.x, position.y, position.z);
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} tile 
+     * @param {number} rotation
+     */
+    setTileAt(index, tile, rotation=0) {
+        this.tile.setXY(index, tile, rotation);
+    }
+
+    update() {
+        this.position.needsUpdate = true;
+        this.axis.needsUpdate = true;
+        this.tile.needsUpdate = true;
     }
 }

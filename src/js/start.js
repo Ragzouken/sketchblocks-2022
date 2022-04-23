@@ -332,14 +332,11 @@ async function start() {
         );
     };
 
-    
-
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
         alphaTest: .5, 
         map: textures.tiles,
     });
-    blockMaterial.onBeforeCompile = blockShapeShaderFixer;
 
     const cubeCount = 256;
 
@@ -349,25 +346,12 @@ async function start() {
         slab: new BlockShapeInstances(geometries.slab, blockMaterial, cubeCount),
     }
 
+    const billboards = new BillboardInstances(geometries.quad, blockMaterial, cubeCount);
+
     scene.add(renderers.cube.mesh);
     scene.add(renderers.ramp.mesh);
     scene.add(renderers.slab.mesh);
-
-    const orbs = new THREE.InstancedMesh(geometries.quad, test, 128);
-    orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const tiles = new THREE.InstancedBufferAttribute(new Float32Array(orbs.instanceMatrix.count), 1);
-    geometries.quad.setAttribute("instanceTile", tiles);
-    orbs.visible = false;
-
-    for (let i = 0; i < tiles.count; ++i) {
-        tiles.setX(i, THREE.MathUtils.randInt(0, 11));
-    }
-    
-    const pointers = new THREE.InstancedMesh(geometries.quad, spriteMaterials.pointer, 128);
-    pointers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
-    scene.add(orbs);
-    scene.add(pointers);
+    scene.add(billboards.mesh);
     
     const kinematic = new KinematicGuy();
 
@@ -387,11 +371,7 @@ async function start() {
     const dialogue = document.getElementById("dialogue");
     renderer.domElement.parentElement.append(dialogue);
     dialogue.hidden = true;
-
-    const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFF00FF, 0x00FFFF, 0xFFFF00]
-
-    const t = ["slab", "ramp", "cube", "ramp", "slab"]
-
+    
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
@@ -490,32 +470,17 @@ async function start() {
 
     const held = {};
     let pressed = {};
-    
-    const normals = [];
 
-    orbs.count = 64;
-    for (let i = 0; i < orbs.count; ++i) {
+    for (let i = 0; i < billboards.count; ++i) {
         dummy.position.set(
             (.5 - Math.random()) * 3, 
             (.5 - Math.random()) * 3, 
             (.5 - Math.random()) * 3,
         );
-        dummy.updateMatrix();
 
-        const color = new THREE.Color(Math.random(), Math.random(), Math.random());
-        const normal = new THREE.Vector3(Math.random()-.5, Math.random()-.5, Math.random()-.5);
-        normal.normalize();
-        normals.push(normal);
-    
-        orbs.setMatrixAt(i, dummy.matrix);
-        orbs.setColorAt(i, color);
-
-        pointers.setMatrixAt(i, dummy.matrix);
-        pointers.setColorAt(i, color);
+        billboards.setPositionAt(i, dummy.position);
+        billboards.setTileAt(i, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
     }
-
-    orbs.instanceMatrix.needsUpdate = true;
-    pointers.instanceMatrix.needsUpdate = true;
 
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
@@ -563,40 +528,20 @@ async function start() {
                 THREE.MathUtils.randInt(0, renderers.ramp.count),
                 THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
             );
+            billboards.setTileAt(
+                THREE.MathUtils.randInt(0, billboards.count),
+                THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+            );
         }
+    
         renderers.cube.update();
         renderers.ramp.update();
         renderers.slab.update();
+        billboards.update();
 
         if (nearby) actionIcon.position.copy(nearby.position).add(new THREE.Vector3(0, 1, 0));
         actionIcon.rotation.setFromQuaternion(twist);
         actionIcon.visible = dialogue.hidden && nearby !== undefined;
-
-        pointsVerts.length = 0;
-        for (let i = 0; i < orbs.count; ++i) {
-            orbs.getMatrixAt(i, dummy.matrix);
-            dummy.position.setFromMatrixPosition(dummy.matrix);
-            dummy.rotation.setFromQuaternion(cameraQuat);
-            dummy.updateMatrix();
-            //orbs.setMatrixAt(i, dummy.matrix);
-
-            const rotMatrix = new THREE.Matrix4();
-            const normal = normals[i];
-            const a = new THREE.Vector3();
-            const b = new THREE.Vector3();
-
-            a.crossVectors(normal, forward).normalize();
-            b.crossVectors(a, normal).normalize();
-            rotMatrix.makeBasis(a, normal, b);
-
-            pointers.getMatrixAt(i, dummy.matrix);
-            dummy.position.setFromMatrixPosition(dummy.matrix);
-            dummy.rotation.setFromRotationMatrix(rotMatrix);
-            dummy.updateMatrix();
-            pointers.setMatrixAt(i, dummy.matrix);
-        }
-        orbs.instanceMatrix.needsUpdate = true;
-        pointers.instanceMatrix.needsUpdate = true;
 
         renderer.render(scene, camera);
 
@@ -670,7 +615,6 @@ async function start() {
             });
         }
 
-        pointers.visible = false;
         compass.visible = false;
 
         guy.material.map = kinematic.hadGroundContact ? guyTex : guyFallTex;
