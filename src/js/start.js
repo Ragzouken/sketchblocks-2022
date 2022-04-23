@@ -303,8 +303,8 @@ async function start() {
 
     scene.add(actionIcon);
 
-    // textures.tiles.magFilter = THREE.NearestFilter;
-    // textures.tiles.minFilter = THREE.NearestFilter;
+    textures.tiles.magFilter = THREE.NearestFilter;
+    textures.tiles.minFilter = THREE.NearestFilter;
 
     const test = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: textures.tiles });
     test.onBeforeCompile = shaderChanger2;
@@ -379,8 +379,6 @@ async function start() {
     points.name = "LINES"
     points.renderOrder = 1;
     scene.add(points);
-    //test.uniforms.color.value = new THREE.Color(0xFF0000);
-    //test.color = new THREE.Color(0xFF0000);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true });
     renderer.setSize(w, h);
@@ -426,7 +424,7 @@ async function start() {
 
         const cube = new THREE.Mesh(geometries[type], test);
         cube.position.set(...position);
-        cube.rotation.setFromRotationMatrix(cubeOrientations[rotation]);
+        cube.rotation.setFromRotationMatrix(S4Lookup[rotation]);
         
         cube.name = "block";
 
@@ -552,7 +550,7 @@ async function start() {
             }
         });
 
-        for (let i = 0; i < 1; ++i) {
+        for (let i = 0; i < 4; ++i) {
             renderers.cube.setTileAt(
                 THREE.MathUtils.randInt(0, renderers.cube.count),
                 THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
@@ -633,10 +631,12 @@ async function start() {
         if (held["s"]) motion.add(forward.clone().multiplyScalar(-3));
         if (held["a"]) motion.add(left.clone().multiplyScalar(-3));
         if (held["d"]) motion.add(left.clone().multiplyScalar(3));
-        if (held["ArrowLeft"]) pivot.rotation.y -= .02;
-        if (held["ArrowRight"]) pivot.rotation.y += .02;
-        if (held["ArrowUp"]) pivot.rotation.x -= .02;
-        if (held["ArrowDown"]) pivot.rotation.x += .02;
+        if (held["ArrowLeft"]) pivot.rotation.y -= .03;
+        if (held["ArrowRight"]) pivot.rotation.y += .03;
+        if (held["ArrowUp"]) pivot.rotation.x -= .03;
+        if (held["ArrowDown"]) pivot.rotation.x += .03;
+
+        pivot.rotation.x = THREE.MathUtils.clamp(pivot.rotation.x, -Math.PI/4, Math.PI/4);
 
         if (!dialogue.hidden && pressed["Enter"]) {
             dialogue.hidden = true;

@@ -9,38 +9,51 @@ const orthoNormals = [
     new THREE.Vector3(-1, 0, 0),
 ];
 
-const cubeOrientations = [];
+const S4Lookup = [];
 
 for (const up of orthoNormals) {
     for (const forward of orthoNormals) {
         if (Math.abs(up.dot(forward)) > .1) continue;
         const left = up.clone().cross(forward);
-        cubeOrientations.push(new THREE.Matrix4().makeBasis(left, up, forward));
+        S4Lookup.push(new THREE.Matrix4().makeBasis(left, up, forward));
     }
 }
 
-const faceOrientations = [
-    new THREE.Vector2(0, 1),
-    new THREE.Vector2(3, 0),
-    new THREE.Vector2(2, 3),
-    new THREE.Vector2(1, 2),
-    new THREE.Vector2(2, 1),
-    new THREE.Vector2(1, 0),
-    new THREE.Vector2(0, 3),
-    new THREE.Vector2(3, 2),
+// dihedral group 2 i.e rotation+flip of rect
+const D2Lookup = [
+    0, 1,    3, 0,    2, 3,     1, 2, 
+    2, 1,    1, 0,    0, 3,     3, 2,
 ];
 
-function blockShapeShaderFixer(shader) {
-    shader.uniforms.tileScale = { value: 1/16 };
-    shader.uniforms.cubeOrientations = { value: cubeOrientations };
-    shader.uniforms.faceOrientations = { value: faceOrientations };
-
-    shader.vertexShader = shader.vertexShader.replace("#include <common>", `
-#include <common>
+const tileDefines = `
 uniform float tileScale;
-uniform mat4[24] cubeOrientations;
-uniform vec2[8] faceOrientations;
+uniform int[16] D2Lookup;
 
+vec2 mapFace(vec2 uv, int orientation) {
+    vec4 components = vec4(uv.x, uv.y, 1.0 - uv.x, 1.0 - uv.y);
+    int xi = D2Lookup[orientation * 2 + 0];
+    int yi = D2Lookup[orientation * 2 + 1];
+    return vec2(components[xi], components[yi]);
+}
+
+vec2 mapTile(vec2 uv, float tile) {
+    uv += vec2(mod(tile, 16.0), floor(tile / 16.0));
+    uv *= tileScale;
+    return uv;
+}
+`;
+
+const cubeDefines = `
+uniform mat4[24] S4Lookup;
+
+mat4 mapCube(vec3 position, int orientation) {
+    mat4 matrix = S4Lookup[orientation];
+    matrix[3].xyz = position;
+    return matrix;
+}
+`;
+
+const blockTileDefines = tileDefines + cubeDefines + `
 attribute vec4 instanceOrientation;
 attribute vec3 uvSpecial;
 
@@ -48,46 +61,37 @@ attribute vec4 faceTiles0;
 attribute vec4 faceTiles1;
 attribute vec4 faceOrients0;
 attribute vec4 faceOrients1;
+`;
 
-// varying vec3 vColor;
-        `.trim(),
-    );
-
-    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", `
+const blockTileUVs = `
     #ifdef USE_UV
         float faceIndex = uvSpecial.z;
         vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
         vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
-        
+
         int index = int(mod(faceIndex, 4.0));
         float tileIndex = faceTiles[index];
         int rotIndex = int(faceRots[index]);
-        
-        vec4 components = vec4(
-            uvSpecial.x, 
-            uvSpecial.y, 
-            1.0 - uvSpecial.x, 
-            1.0 - uvSpecial.y
-        );
-        vec2 faceOrientation = faceOrientations[rotIndex];
-        vUv = vec2(
-            components[int(faceOrientation.x)], 
-            components[int(faceOrientation.y)]
-        );
-    
-        vec2 tile = vec2(mod(tileIndex, 16.0), floor(tileIndex / 16.0));
-        vUv += tile;
-        vUv *= tileScale;
+
+        vUv = mapFace(uvSpecial.xy, rotIndex);
+        vUv = mapTile(vUv, tileIndex);
     #endif
-            `.trim(),
-    );
+`;
 
+/** 
+ * @param {THREE.Shader} shader
+ */
+function blockShapeShaderFixer(shader) {
+    shader.uniforms.tileScale = { value: 1/16 };
+    shader.uniforms.S4Lookup = { value: S4Lookup };
+    shader.uniforms.D2Lookup = { value: D2Lookup };
+
+    shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
+` + blockTileDefines);
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", blockTileUVs);
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
-// transform matrix is just position + one of 24 rotations
 vec4 mvPosition = vec4(transformed, 1.0);
-mat4 blockMatrix = cubeOrientations[int(instanceOrientation.w)];
-blockMatrix[3].xyz = instanceOrientation.xyz;
-
+mat4 blockMatrix = mapCube(instanceOrientation.xyz, int(instanceOrientation.w));
 mat4 combined = projectionMatrix * modelViewMatrix * blockMatrix; 
 
 // pull backfaces in a little to prevent z-fighting inside transparent blocks
