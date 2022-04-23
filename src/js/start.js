@@ -334,15 +334,19 @@ async function start() {
 
     
 
-    const blockMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: textures.tiles });
+    const blockMaterial = new THREE.MeshBasicMaterial({ 
+        side: THREE.DoubleSide, 
+        alphaTest: .5, 
+        map: textures.tiles,
+    });
     blockMaterial.onBeforeCompile = blockShapeShaderFixer;
 
-    const cubeCount = 4096;
+    const cubeCount = 256;
     const cubes = new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount);
-    //scene.add(cubes.mesh);
+    scene.add(cubes.mesh);
 
     const ramps = new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount);
-    scene.add(ramps.mesh);
+    // scene.add(ramps.mesh);
 
     for (let i = 0; i < cubeCount; ++i) {
         const position = new THREE.Vector3(
@@ -352,16 +356,30 @@ async function start() {
         );
 
         cubes.setPositionAt(i, position);
-        cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255));
+        cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255), 0);
 
         const position2 = new THREE.Vector3(
-            THREE.MathUtils.randInt(-15, 15),
-            THREE.MathUtils.randInt(-15, 15),
-            THREE.MathUtils.randInt(-15, 15),
+            THREE.MathUtils.randInt(-8, 8),
+            THREE.MathUtils.randInt(-8, 8),
+            THREE.MathUtils.randInt(-8, 8),
         );
         ramps.setPositionAt(i, position2);
-        ramps.setTilesAt(i, THREE.MathUtils.randInt(0, 255));
+        ramps.setRotationAt(i, 0);
+        //THREE.MathUtils.randInt(0, 255)
+        ramps.setTilesAt(i, 0, 0);
     }
+
+    for (let y = 0; y < 16; ++y) {
+        for (let x = 0; x < 16; ++x) {
+            cubes.setPositionAt(y * 16 + x, new THREE.Vector3(x, 0, y));
+            for (let f = 0; f < 8; ++f) {
+                cubes.setTileAt(y * 16 + x, f, 10, THREE.MathUtils.randInt(0, 7));
+            }
+        }
+    }
+
+    cubes.update();
+    ramps.update();
 
     const orbs = new THREE.InstancedMesh(geometries.quad, test, 128);
     orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -562,16 +580,23 @@ async function start() {
         });
 
         for (let i = 0; i < 8; ++i) {
-            ramps.setTileAt(
-                THREE.MathUtils.randInt(0, cubeCount), 
-                THREE.MathUtils.randInt(0, 7), 
-                THREE.MathUtils.randInt(0, 255),
-            );
-            ramps.setRotationAt(
+            // ramps.setTileAt(
+            //     THREE.MathUtils.randInt(0, cubeCount), 
+            //     THREE.MathUtils.randInt(0, 7), 
+            //     THREE.MathUtils.randInt(0, 255),
+            //     THREE.MathUtils.randInt(0, 7),
+            // );
+            // ramps.setRotationAt(
+            //     THREE.MathUtils.randInt(0, cubeCount),
+            //     THREE.MathUtils.randInt(0, 23),
+            // );
+
+            cubes.setTileAt(
                 THREE.MathUtils.randInt(0, cubeCount),
-                THREE.MathUtils.randInt(0, 23),
+                0, 10, THREE.MathUtils.randInt(0, 7),
             );
         }
+        cubes.update();
         ramps.update();
 
         if (nearby) actionIcon.position.copy(nearby.position).add(new THREE.Vector3(0, 1, 0));
