@@ -49,53 +49,53 @@ attribute vec4 faceTiles1;
 attribute vec4 faceOrients0;
 attribute vec4 faceOrients1;
 
-varying vec3 vColor;
-        `.trim(),
-    );
-    
-    shader.vertexShader = shader.vertexShader.replace(
-        "#include <begin_vertex>", 
-        "#include <begin_vertex>; transformed -= normal * 0.001;",
-    );
-
-    shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
-vec4 mvPosition = vec4(transformed, 1.0);
-mat4 blockMatrix = cubeOrientations[int(instanceOrientation.w)];
-blockMatrix[3].xyz = instanceOrientation.xyz;
-mvPosition = blockMatrix * mvPosition;
-mvPosition = modelViewMatrix * mvPosition;
-gl_Position = projectionMatrix * mvPosition;
+// varying vec3 vColor;
         `.trim(),
     );
 
     shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", `
-#ifdef USE_UV
-    float faceIndex = uvSpecial.z;
-    vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
-    vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
+    #ifdef USE_UV
+        float faceIndex = uvSpecial.z;
+        vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
+        vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
+        
+        int index = int(mod(faceIndex, 4.0));
+        float tileIndex = faceTiles[index];
+        int rotIndex = int(faceRots[index]);
+        
+        vec4 components = vec4(
+            uvSpecial.x, 
+            uvSpecial.y, 
+            1.0 - uvSpecial.x, 
+            1.0 - uvSpecial.y
+        );
+        vec2 faceOrientation = faceOrientations[rotIndex];
+        vUv = vec2(
+            components[int(faceOrientation.x)], 
+            components[int(faceOrientation.y)]
+        );
     
-    int index = int(mod(faceIndex, 4.0));
-    float tileIndex = faceTiles[index];
-    int rotIndex = int(faceRots[index]);
-    
-    vec4 components = vec4(
-        uvSpecial.x, 
-        uvSpecial.y, 
-        1.0 - uvSpecial.x, 
-        1.0 - uvSpecial.y
-    );
-    vec2 faceOrientation = faceOrientations[rotIndex];
-    vUv = vec2(
-        components[int(faceOrientation.x)], 
-        components[int(faceOrientation.y)]
+        vec2 tile = vec2(mod(tileIndex, 16.0), floor(tileIndex / 16.0));
+        vUv += tile;
+        vUv *= tileScale;
+    #endif
+            `.trim(),
     );
 
-    vColor = vec3(faceRots.xyz);
+    shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
+// transform matrix is just position + one of 24 rotations
+vec4 mvPosition = vec4(transformed, 1.0);
+mat4 blockMatrix = cubeOrientations[int(instanceOrientation.w)];
+blockMatrix[3].xyz = instanceOrientation.xyz;
 
-    vec2 tile = vec2(mod(tileIndex, 16.0), floor(tileIndex / 16.0));
-    vUv += tile;
-    vUv *= tileScale;
-#endif
+mat4 combined = projectionMatrix * modelViewMatrix * blockMatrix; 
+
+// pull backfaces in a little to prevent z-fighting inside transparent blocks
+vec3 norm = transformDirection(normal, combined);
+float offset = dot(norm, vec3(0.0, 0.0, 1.0));
+mvPosition.xyz -= normal * clamp(offset, 0.0, 1.0) * 0.001;
+
+gl_Position = combined * mvPosition;
         `.trim(),
     );
 
@@ -106,7 +106,8 @@ gl_Position = projectionMatrix * mvPosition;
 //     );
 
 //     shader.fragmentShader = shader.fragmentShader.replace("#include <output_fragment>", `
-// gl_FragColor = vec4(vColor, 1.0);
+// #include <output_fragment>
+// gl_FragColor *= vec4(vColor, 1.0);
 //         `.trim(),
 //     );
 };

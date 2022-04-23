@@ -342,51 +342,16 @@ async function start() {
     blockMaterial.onBeforeCompile = blockShapeShaderFixer;
 
     const cubeCount = 256;
-    const cubes = new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount);
-    scene.add(cubes.mesh);
-
-    const ramps = new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount);
-    scene.add(ramps.mesh);
 
     const renderers = {
-        cube: cubes, ramp: ramps,
+        cube: new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount), 
+        ramp: new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount),
         slab: new BlockShapeInstances(geometries.slab, blockMaterial, cubeCount),
     }
 
+    scene.add(renderers.cube.mesh);
+    scene.add(renderers.ramp.mesh);
     scene.add(renderers.slab.mesh);
-
-    // for (let i = 0; i < cubeCount; ++i) {
-    //     const position = new THREE.Vector3(
-    //         THREE.MathUtils.randInt(-15, 15),
-    //         THREE.MathUtils.randInt(-15, 15),
-    //         THREE.MathUtils.randInt(-15, 15),
-    //     );
-
-    //     cubes.setPositionAt(i, position);
-    //     cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255), 0);
-
-    //     const position2 = new THREE.Vector3(
-    //         THREE.MathUtils.randInt(-8, 8),
-    //         THREE.MathUtils.randInt(-8, 8),
-    //         THREE.MathUtils.randInt(-8, 8),
-    //     );
-    //     ramps.setPositionAt(i, position2);
-    //     ramps.setRotationAt(i, 0);
-    //     //THREE.MathUtils.randInt(0, 255)
-    //     ramps.setTilesAt(i, 0, 0);
-    // }
-
-    // for (let y = 0; y < 16; ++y) {
-    //     for (let x = 0; x < 16; ++x) {
-    //         cubes.setPositionAt(y * 16 + x, new THREE.Vector3(x, 0, y));
-    //         for (let f = 0; f < 8; ++f) {
-    //             cubes.setTileAt(y * 16 + x, f, 10, THREE.MathUtils.randInt(0, 7));
-    //         }
-    //     }
-    // }
-
-    // cubes.update();
-    // ramps.update();
 
     const orbs = new THREE.InstancedMesh(geometries.quad, test, 128);
     orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -473,7 +438,7 @@ async function start() {
         const index = renderer.count++;
         renderer.setPositionAt(index, cube.position);
         renderer.setRotationAt(index, rotation);
-        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255));
+        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
     });
 
     /** @type {THREE.Mesh[]} */
@@ -587,25 +552,23 @@ async function start() {
             }
         });
 
-        for (let i = 0; i < 8; ++i) {
-            // ramps.setTileAt(
-            //     THREE.MathUtils.randInt(0, cubeCount), 
-            //     THREE.MathUtils.randInt(0, 7), 
-            //     THREE.MathUtils.randInt(0, 255),
-            //     THREE.MathUtils.randInt(0, 7),
-            // );
-            // ramps.setRotationAt(
-            //     THREE.MathUtils.randInt(0, cubeCount),
-            //     THREE.MathUtils.randInt(0, 23),
-            // );
-
-            // cubes.setTileAt(
-            //     THREE.MathUtils.randInt(0, cubeCount),
-            //     THREE.MathUtils.randInt(0, 7), 10, THREE.MathUtils.randInt(0, 7),
-            // );
+        for (let i = 0; i < 1; ++i) {
+            renderers.cube.setTileAt(
+                THREE.MathUtils.randInt(0, renderers.cube.count),
+                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+            );
+            renderers.slab.setTileAt(
+                THREE.MathUtils.randInt(0, renderers.slab.count),
+                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+            );
+            renderers.ramp.setTileAt(
+                THREE.MathUtils.randInt(0, renderers.ramp.count),
+                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+            );
         }
-        cubes.update();
-        ramps.update();
+        renderers.cube.update();
+        renderers.ramp.update();
+        renderers.slab.update();
 
         if (nearby) actionIcon.position.copy(nearby.position).add(new THREE.Vector3(0, 1, 0));
         actionIcon.rotation.setFromQuaternion(twist);
@@ -696,7 +659,7 @@ async function start() {
             for (let i = 0; i < split; ++i)
                 kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        if (true) {
+        if (false) {
             kinematic.contacts.forEach((contact) => {
                 pushVector(pointsVerts, contact.triangle.triangle.a);
                 pushVector(pointsVerts, contact.triangle.triangle.b);
