@@ -291,6 +291,8 @@ class KinematicGuy {
         const nextPosition = this.prevPosition.clone().add(actualMotion);
         
         let contacts = this.scene.getCapsuleContacts(this.capsule, nextPosition);
+        
+        /** @type {THREE.Plane[]} */
         let bounds = [];
 
         let solvedContacts = false;
@@ -306,7 +308,7 @@ class KinematicGuy {
 
                     // distance to plane..
                     const test = this.prevPosition.clone().add(actualMotion);
-                    const distance = planePointDistance(bound, test);
+                    const distance = bound.distanceToPoint(test);
                     const inside = distance + this.allowedPenetration < 0;
 
                     if (inside) {
@@ -627,8 +629,7 @@ class KinematicGuy {
     /**
      * @param {THREE.Vector3} motion
      */
-    hasForbiddenContact(motion = new THREE.Vector3(0, 0, 0))
-    {
+    hasForbiddenContact(motion = new THREE.Vector3(0, 0, 0)) {
         const stationary = motion.manhattanLength() == 0;
 
         return this.contacts.some((contact) => {

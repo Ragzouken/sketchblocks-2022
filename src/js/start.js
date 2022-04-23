@@ -179,8 +179,8 @@ const leveldata = {
     ],
 
     sprites: [
-        ["pillar", [ 0, 3.5, -1], true],
-        ["orb", [1,  1,  -1]],
+        { tile: "pillar", position: [ 0, 3.5, -1], vertical: true, text: "so refined.."},
+        { tile: "orb", position: [1,  1,  -1], text: "I AM ORB." },
     ],
 }
 
@@ -214,18 +214,19 @@ function makeGeometry(data) {
         {
             positions.push(...face.positions[i]);
             texcoords.push(...face.texturing[i]);
+            texcoords.push(faceIndex); // third test coord
             normals.push(normal.x, normal.y, normal.z);
         }
     });
 
     const p = new THREE.BufferAttribute(new Float32Array(positions), 3);
-    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 2);
+    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 3);
     const n = new THREE.BufferAttribute(new Float32Array(normals), 3);
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", p);
     geometry.setAttribute("normal", n);
-    geometry.setAttribute("uv", t);
+    geometry.setAttribute("uvSpecial", t);
     geometry.setIndex(indexes);
 
     geometry.translate(-.5, -.5, -.5);
@@ -261,26 +262,32 @@ async function start() {
 
     const loader = new THREE.TextureLoader();
 
-    const [texture, pillarTex, orbTex, guyTex, guyFallTex, gridTex, compassTex] = await Promise.all([
+    const [crateTex, guyTex, guyFallTex] = await Promise.all([
         "crate.png",
-        "pillar.png",
-        "orb.png",
         "guy-back.png",
-        "guy-fall.png",
-        "grid.png",
-        "compass.png",
+        "guy-fall.png", 
     ].map((url) => loader.loadAsync(url)));
 
     const loads = {
+        pillar: "pillar.png",
+        orb: "orb.png",
         orbSmall: "orb-small.png",
         pointer: "pointer.png",
+        compass: "compass.png",
+
+        guyBack: "guy-back.png",
+        guyFall: "guy-fall.png",
+
+        enter: "enter.png",
+        speak: "speak.png",
+        tiles: "tiles.png",
     };
 
     const textures = Object.fromEntries(
         await Promise.all(Object.entries(loads).map(async ([key, url]) => [key, await loader.loadAsync(url)]))
     );
 
-    console.log(textures)
+    const spriteMaterials = Object.fromEntries(Object.entries(textures).map(([key, texture]) => [key, new THREE.MeshBasicMaterial({ map: texture, alphaTest: .5, side: THREE.DoubleSide, })]));
 
     const geometries = {
         ramp: makeGeometry(ramp),
@@ -289,93 +296,90 @@ async function start() {
         quad: new THREE.PlaneGeometry(1, 1),
     };
 
-    const materials = {
-        pillar: new THREE.MeshBasicMaterial({
-            map: pillarTex,
-            alphaTest: .5,
-        }),
-        orb: new THREE.MeshBasicMaterial({
-            map: orbTex,
-            alphaTest: .5,
-        }),
-        guy: new THREE.MeshBasicMaterial({
-            map: guyTex,
-            alphaTest: .5,
-        }),
-        grid: new THREE.MeshBasicMaterial({
-            map: gridTex,
-            alphaTest: .5,
-            //transparent: true,
-            //opacity: .5,
-        }),
-        compass: new THREE.MeshBasicMaterial({
-            map: compassTex,
-            alphaTest: .5,
-            side: THREE.DoubleSide,
-        }),
+    const dummy = new THREE.Mesh();
 
-        orbSmall: new THREE.MeshBasicMaterial({
-            map: textures.orbSmall,
-            alphaTest: .5,
-        }),
+    const guy = new THREE.Mesh(geometries.quad, spriteMaterials.guyBack);
+    const actionIcon = new THREE.Mesh(geometries.quad, spriteMaterials.speak);
 
-        pointer: new THREE.MeshBasicMaterial({
-            map: textures.pointer,
-            alphaTest: .5,
-            side: THREE.DoubleSide,
-        })
+    scene.add(actionIcon);
+
+    // textures.tiles.magFilter = THREE.NearestFilter;
+    // textures.tiles.minFilter = THREE.NearestFilter;
+
+    const test = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: textures.tiles });
+    test.onBeforeCompile = shaderChanger2;
+    
+    function shaderChanger(shader) {
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <begin_vertex>", 
+            "#include <begin_vertex>; transformed -= normal * 0.001;",
+        );
+    };
+
+    function shaderChanger2(shader) {
+        shader.uniforms.tileScale = { value: 1/16 };
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <common>", 
+            "#include <common>\nuniform float tileScale; attribute float instanceTile; ",
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <uv_vertex>", 
+            "#include <uv_vertex>\nvUv.x += instanceTile; vUv.x *= tileScale;",
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <project_vertex>", 
+            "#include <project_vertex>\nmat3 invView = inverse(mat3(modelViewMatrix)); gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(invView * position, 1.0);",
+        );
+    };
+
+    
+
+    const blockMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: textures.tiles });
+    blockMaterial.onBeforeCompile = blockShapeShaderFixer;
+
+    const cubeCount = 4096;
+    const cubes = new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount);
+    //scene.add(cubes.mesh);
+
+    const ramps = new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount);
+    scene.add(ramps.mesh);
+
+    for (let i = 0; i < cubeCount; ++i) {
+        const position = new THREE.Vector3(
+            THREE.MathUtils.randInt(-15, 15),
+            THREE.MathUtils.randInt(-15, 15),
+            THREE.MathUtils.randInt(-15, 15),
+        );
+
+        cubes.setPositionAt(i, position);
+        cubes.setTilesAt(i, THREE.MathUtils.randInt(0, 255));
+
+        const position2 = new THREE.Vector3(
+            THREE.MathUtils.randInt(-15, 15),
+            THREE.MathUtils.randInt(-15, 15),
+            THREE.MathUtils.randInt(-15, 15),
+        );
+        ramps.setPositionAt(i, position2);
+        ramps.setTilesAt(i, THREE.MathUtils.randInt(0, 255));
     }
 
-    const orbs = new THREE.InstancedMesh(geometries.quad, materials.orbSmall, 128);
+    const orbs = new THREE.InstancedMesh(geometries.quad, test, 128);
     orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const pointers = new THREE.InstancedMesh(geometries.quad, materials.pointer, 128);
-    orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const tiles = new THREE.InstancedBufferAttribute(new Float32Array(orbs.instanceMatrix.count), 1);
+    geometries.quad.setAttribute("instanceTile", tiles);
+    orbs.visible = false;
 
-    const dummy = new THREE.Mesh();
+    for (let i = 0; i < tiles.count; ++i) {
+        tiles.setX(i, THREE.MathUtils.randInt(0, 11));
+    }
+    
+    const pointers = new THREE.InstancedMesh(geometries.quad, spriteMaterials.pointer, 128);
+    pointers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
     scene.add(orbs);
     scene.add(pointers);
-
-    const guy = new THREE.Mesh(geometries.quad, materials.guy);
-
-    const test = new THREE.ShaderMaterial({
-        uniforms: {
-            map: { value: texture },
-            color: { value: new THREE.Color(0xFFFFFF) },
-        },
     
-        vertexShader: `
-varying vec2 vUv;
-varying vec3 vNormal;
-
-void main() {
-    vUv = uv; 
-    vNormal = normal;
-
-    vec4 adjusted = vec4(position, 1);
-    adjusted = vec4(position - normal*.0001, 1.0);
-    vec4 modelViewPosition = modelViewMatrix * adjusted;
-    gl_Position = projectionMatrix * modelViewPosition; 
-}
-        `.trim(),
-        fragmentShader: `
-        uniform sampler2D map; 
-        uniform vec3 color;
-        varying vec2 vUv;
-        varying vec3 vNormal;
-
-        void main() {
-            gl_FragColor = texture2D(map, vUv) * vec4(color*.75, 1);
-            if (gl_FragColor.a < .5) discard;
-        }
-        `.trim(),
-
-        side: THREE.DoubleSide,
-        transparent: false,
-    });
-
     const kinematic = new KinematicGuy();
-    test.map = texture
 
     const pointsVerts = [];
     const pointsGeometry = new THREE.BufferGeometry();
@@ -391,6 +395,10 @@ void main() {
     const renderer = new THREE.WebGLRenderer({ alpha: true });
     renderer.setSize(w, h);
     visible.appendChild(renderer.domElement);
+
+    const dialogue = document.getElementById("dialogue");
+    renderer.domElement.parentElement.append(dialogue);
+    dialogue.hidden = true;
 
     const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFF00FF, 0x00FFFF, 0xFFFF00]
 
@@ -413,7 +421,7 @@ void main() {
         return norm;
     }
 
-    const compass = new THREE.Mesh(geometries.quad, materials.compass);
+    const compass = new THREE.Mesh(geometries.quad, spriteMaterials.compass);
     scene.add(compass);
 
     /** @type {THREE.Mesh[]} */
@@ -423,10 +431,11 @@ void main() {
         const [type, position, rotation = [0, 0]] = block;
 
         const material = test.clone();
+        material.map = crateTex;
+        material.onBeforeCompile = shaderChanger;
         const color = new THREE.Color(colors[(i+6) % 6]);
 
         material.color = color;
-        material.uniforms.color = { value: color };
 
         const ry = rotation[0] * Math.PI / 2;
         const rx = rotation[1] * Math.PI / 2;
@@ -441,15 +450,17 @@ void main() {
         blocks.push(cube);
     });
 
+    /** @type {THREE.Mesh[]} */
     const billbs = [];
 
     leveldata.sprites.forEach((sprite, i) => {
-        const [type, position, vert] = sprite;
-        const billb = new THREE.Mesh(geometries.quad, materials[type]);
+        const { tile, position, vertical, text } = sprite;
+        const billb = new THREE.Mesh(geometries.quad, spriteMaterials[tile]);
         billb.position.set(...position);
         level.add(billb);
 
-        billb.userData.vert = vert;
+        billb.userData.vert = vertical;
+        billb.userData.text = text;
         billb.name = "sprite";
 
         billbs.push(billb);
@@ -481,6 +492,7 @@ void main() {
             triangles.push([v0, v1, v2]);
         }
     });
+
     kinematic.scene.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
     kinematic.prevPosition.set(0, 2, 0);
 
@@ -488,6 +500,7 @@ void main() {
     //controls.rotateSpeed = .25;
 
     const held = {};
+    let pressed = {};
     
     const normals = [];
 
@@ -518,26 +531,60 @@ void main() {
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
 
+    /**
+     * @param {number[]} target
+     * @param {THREE.Vector3} vector
+     */
+    function pushVector(target, vector) {
+        target.push(vector.x, vector.y, vector.z);
+    }
+
     function animate() {
         camera.getWorldDirection(forward);
         camera.getWorldQuaternion(cameraQuat);
+
+        const { twist } = swingTwistDecompose(cameraQuat, new THREE.Vector3(0, 1, 0));
+
+        let nearby;
 
         billbs.forEach((bilb) => {
             if (!bilb.userData.vert) {
                 bilb.rotation.setFromQuaternion(cameraQuat);
             } else {
-                const { twist } = swingTwistDecompose(cameraQuat, new THREE.Vector3(0, 1, 0));
                 bilb.rotation.setFromQuaternion(twist);
             }
+
+            if (bilb === guy) return;
+
+            if (bilb.userData.text && bilb.position.distanceTo(guy.position) < .8) {
+                nearby = bilb;
+            }
         });
-        
+
+        for (let i = 0; i < 8; ++i) {
+            ramps.setTileAt(
+                THREE.MathUtils.randInt(0, cubeCount), 
+                THREE.MathUtils.randInt(0, 7), 
+                THREE.MathUtils.randInt(0, 255),
+            );
+            ramps.setRotationAt(
+                THREE.MathUtils.randInt(0, cubeCount),
+                THREE.MathUtils.randInt(0, 23),
+            );
+        }
+        ramps.update();
+
+        if (nearby) actionIcon.position.copy(nearby.position).add(new THREE.Vector3(0, 1, 0));
+        actionIcon.rotation.setFromQuaternion(twist);
+        actionIcon.visible = dialogue.hidden && nearby !== undefined;
+
         pointsVerts.length = 0;
         for (let i = 0; i < orbs.count; ++i) {
             orbs.getMatrixAt(i, dummy.matrix);
             dummy.position.setFromMatrixPosition(dummy.matrix);
             dummy.rotation.setFromQuaternion(cameraQuat);
             dummy.updateMatrix();
-            orbs.setMatrixAt(i, dummy.matrix);
+            //orbs.setMatrixAt(i, dummy.matrix);
 
             const rotMatrix = new THREE.Matrix4();
             const normal = normals[i];
@@ -578,11 +625,11 @@ void main() {
         forward.crossVectors(up, left);
         const motionUp = left.clone().cross(forward);
 
-        const test = new THREE.Matrix4();
-        test.makeBasis(left, forward, motionUp);
+        const test2 = new THREE.Matrix4();
+        test2.makeBasis(left, forward, motionUp);
 
         compass.position.copy(kinematic.prevPosition);
-        compass.rotation.setFromRotationMatrix(test);
+        compass.rotation.setFromRotationMatrix(test2);
 
         const motion = new THREE.Vector3();
 
@@ -595,33 +642,40 @@ void main() {
         if (held["ArrowUp"]) pivot.rotation.x -= .02;
         if (held["ArrowDown"]) pivot.rotation.x += .02;
 
+        if (!dialogue.hidden && pressed["Enter"]) {
+            dialogue.hidden = true;
+        } else if (nearby && pressed["Enter"]) {
+            dialogue.textContent = nearby.userData.text;
+            dialogue.hidden = false;
+        }
+
         kinematic.gravity = held["x"] ? 0 : 9;
         const jump = held[" "] && kinematic.hadGroundContact;
-        
+
+        pressed = {};
+
         kinematic.stepHeight = .55;
 
         // hack. cause: falling too fast correctly avoid bullet hole but doesn't
         // allow you to actually touch the ground
-        const split = 4 - Math.floor(kinematic.gravityVelocity.y);
-        for (let i = 0; i < split; ++i)
-            kinematic.move(motion, jump ? 5 : 0, 1/60/split);
+        const split = 3 - Math.floor(kinematic.gravityVelocity.y);
+        if (dialogue.hidden)
+            for (let i = 0; i < split; ++i)
+                kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        /**
-         * @param {number[]} target
-         * @param {THREE.Vector3} vector
-         */
-        function pushVector(target, vector) {
-            target.push(vector.x, vector.y, vector.z);
+        if (false) {
+            kinematic.contacts.forEach((contact) => {
+                pushVector(pointsVerts, contact.triangle.triangle.a);
+                pushVector(pointsVerts, contact.triangle.triangle.b);
+                pushVector(pointsVerts, contact.triangle.triangle.b);
+                pushVector(pointsVerts, contact.triangle.triangle.c);
+                pushVector(pointsVerts, contact.triangle.triangle.c);
+                pushVector(pointsVerts, contact.triangle.triangle.a);
+            });
         }
 
-        kinematic.contacts.forEach((contact) => {
-            pushVector(pointsVerts, contact.triangle.triangle.a);
-            pushVector(pointsVerts, contact.triangle.triangle.b);
-            pushVector(pointsVerts, contact.triangle.triangle.b);
-            pushVector(pointsVerts, contact.triangle.triangle.c);
-            pushVector(pointsVerts, contact.triangle.triangle.c);
-            pushVector(pointsVerts, contact.triangle.triangle.a);
-        });
+        pointers.visible = false;
+        compass.visible = false;
 
         guy.material.map = kinematic.hadGroundContact ? guyTex : guyFallTex;
 
@@ -659,6 +713,7 @@ void main() {
 
     window.addEventListener("keydown", (event) => {
         held[event.key] = true;
+        pressed[event.key] = true;
     });
 
     window.addEventListener("keyup", (event) => {
@@ -677,7 +732,6 @@ function swingTwistDecompose(rotation, axis)
 
     const d = axis.dot(ra);
 
-    //console.log(p)
     const twist = new THREE.Quaternion(p.x, p.y, p.z, rotation.w).normalize();
     if (d < 0) {
         twist.x *= -1;

@@ -38,3 +38,16 @@ html, body {
     padding: .5em;
     white-space: pre-wrap;
 }
+
+#dialogue {
+    background: black;
+    color: white;
+    font-family: monospace;
+    font-size: 8px;
+    padding: .5em;
+    white-space: pre-wrap;
+
+    position: absolute;
+    transform: translate(-50%, -50%);
+    left: 50%; top: 75%;
+}
