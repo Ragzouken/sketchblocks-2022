@@ -14,33 +14,57 @@ function scaleElementToParent(element) {
     return scale;
 }
 
+/**
+ * @param {number[]} target
+ * @param {THREE.Vector3} vector
+ */
+function pushVector(target, vector) {
+    target.push(vector.x, vector.y, vector.z);
+}
+
+/**
+ * @param {number[]} target
+ * @param {THREE.Triangle} triangle
+ */
+function pushTriangle(target, triangle) {
+    pushVector(target, triangle.a);
+    pushVector(target, triangle.b);
+    pushVector(target, triangle.b);
+    pushVector(target, triangle.c);
+    pushVector(target, triangle.c);
+    pushVector(target, triangle.a);
+}
+
 const leveldata = {
     blocks: [
-        ["ramp", [ 0, -1,  1], 14],
-        ["ramp", [-1, -1,  1], 11],
-        ["ramp", [-1, -1,  0], 5],
+        ["ramp", [ 0, -1,  1], 9],
+        ["ramp", [-1, -1,  1], 3],
+        ["ramp", [-1, -1,  0], 10],
 
         ["cube", [-1,  0,  0]],
         ["cube", [ 0,  0,  0]],
         ["cube", [ 1,  0,  0]],
-        ["slab", [ 1,  0, -1], 12],
-        ["slab", [ 0,  0,  1], 8],
-        ["slab", [ 1,  0,  1], 8],
+        ["slab", [ 1,  0, -1], 8],
+        ["slab", [ 0,  0,  1], 0],
+        ["slab", [ 1,  0,  1], 0],
 
-        ["wedgeH", [-2, 1, 0], 22],
-        ["wedgeB", [-2, 0, 0], 22],
+        ["wedgeH", [-2, 1, 0], 20],
+        ["wedgeB", [-2, 0, 0], 20],
 
-        ["wedgeH", [-3, 4, 0], 18],
-        ["wedgeB", [-3, 3, 0], 18],
+        ["wedgeH", [-2, 3, 0], 12],
+        ["wedgeB", [-3, 4, 0], 12],
 
         ["cube", [-1,  1,  0]],
-        ["ramp", [ 0,  1,  0], 10],
-        ["ramp", [-1,  1, -1], 13],
+        ["ramp", [ 0,  1,  0], 1],
+        ["ramp", [-1,  1, -1], 10],
 
         ["cube", [-1,  2, -1]],
-        ["ramp", [ 0,  2, -1], 14],
+        ["ramp", [ 0,  2, -1], 9],
 
-        ["slab", [ 0,  3, -1], 8],
+        ["slab", [ 0,  3, -1], 0],
+
+        ["wedgeH", [3, 0, 1], 0, [12, 12, 12, 12.4, 12, 12]],
+        ["wedgeB", [3, 0, 0], 0, [12, 12, 12, 12.4, 12, 12]],
     ],
 
     sprites: [
@@ -108,6 +132,15 @@ async function start() {
     const w = 320*2;
     const h = 240*2;
 
+    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    renderer.setSize(w, h);
+    visible.appendChild(renderer.domElement);
+
+    const dialogue = document.getElementById("dialogue");
+    renderer.domElement.parentElement.append(dialogue);
+    dialogue.hidden = true;
+
+    // camera
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.setZ(5);
@@ -119,6 +152,7 @@ async function start() {
     pivot.rotation.order = "ZYX";
     pivot.add(camera);
 
+    // level
     const level = new THREE.Object3D();
     scene.add(level);
 
@@ -128,7 +162,6 @@ async function start() {
 
     const loader = new THREE.TextureLoader();
     const tilesTex = await loader.loadAsync("tiles.png");
-
     tilesTex.magFilter = THREE.NearestFilter;
     tilesTex.minFilter = THREE.NearestFilter;
 
@@ -139,10 +172,9 @@ async function start() {
         wedgeH: makeGeometry(wedgeHead),
         wedgeB: makeGeometry(wedgeBody),
     };
-    const quad = new THREE.PlaneGeometry(1, 1);
 
-    const guy = new THREE.Mesh(quad, undefined);
-    guy.visible = false;
+    const kinematic = new KinematicGuy();
+    const guy = new THREE.Object3D();
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
@@ -154,18 +186,15 @@ async function start() {
     const spriteMaterial = blockMaterial.clone();
 
     const cubeCount = 4096;
-
     const renderers = new Map(Object.entries(geometries).map(([key, geometry]) => [key, new BlockShapeInstances(geometry, blockMaterial, cubeCount)]));
-
-    const billboards = new BillboardInstances(quad, spriteMaterial, cubeCount);
+    const billboards = new BillboardInstances(new THREE.PlaneGeometry(1, 1), spriteMaterial, cubeCount);
 
     for (const renderer of renderers.values()) {
         scene.add(renderer.mesh);
     }
     scene.add(billboards.mesh);
-    
-    const kinematic = new KinematicGuy();
 
+    // points
     const pointsVerts = [];
     const pointsGeometry = new THREE.BufferGeometry();
     pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
@@ -176,14 +205,6 @@ async function start() {
     points.frustumCulled = false;
     scene.add(points);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true });
-    renderer.setSize(w, h);
-    visible.appendChild(renderer.domElement);
-
-    const dialogue = document.getElementById("dialogue");
-    renderer.domElement.parentElement.append(dialogue);
-    dialogue.hidden = true;
-    
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
@@ -201,19 +222,19 @@ async function start() {
         return norm;
     }
 
-    // leveldata.blocks.forEach((block, i) => {
-    //     const [type, position, rotation = 0] = block;
-    //     const renderer = renderers.get(type);
+    leveldata.blocks.forEach((block, i) => {
+        const [type, position, rotation = 0, tiles=[]] = block;
+        const renderer = renderers.get(type);
 
-    //     for (let y = 0; y < 1; ++y) {
-    //         for (let x = 0; x < 1; ++x) {
-    //             const index = renderer.count++;
-    //             renderer.setPositionAt(index, new THREE.Vector3(...position).add(new THREE.Vector3(x*5, 0, y*3)));
-    //             renderer.setRotationAt(index, rotation);
-    //             renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
-    //         }
-    //     }
-    // });
+        const index = renderer.count++;
+        renderer.setPositionAt(index, new THREE.Vector3(...position));
+        renderer.setRotationAt(index, rotation);
+        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+
+        tiles.forEach((tile, face) => {
+            renderer.setTileAt(index, face, Math.floor(tile), Math.floor((tile % 1) * 10));
+        });
+    });
 
     const types = Array.from(renderers.keys());
     for (let z = 0; z < 16; ++z) {
@@ -225,7 +246,7 @@ async function start() {
                 const renderer = renderers.get(type);
 
                 const index = renderer.count++;
-                renderer.setPositionAt(index, new THREE.Vector3(x, -3-z, y));
+                renderer.setPositionAt(index, new THREE.Vector3(x-8, -2-z, y-8));
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
                 renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
                 // renderer.setTilesAt(index, 12, THREE.MathUtils.randInt(0, 7));
@@ -253,7 +274,7 @@ async function start() {
         const index = billboards.count++;
         billboards.setPositionAt(index, billb.position);
         billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), vertical);
-        billboards.setTileAt(index, tile);
+        billboards.setTileAt(index, Math.floor(tile), Math.floor((tile % 1) * 10));
     });
     billboards.update();
 
@@ -272,38 +293,17 @@ async function start() {
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
 
-    /**
-     * @param {number[]} target
-     * @param {THREE.Vector3} vector
-     */
-    function pushVector(target, vector) {
-        target.push(vector.x, vector.y, vector.z);
-    }
-
-    /**
-     * @param {number[]} target
-     * @param {THREE.Triangle} triangle
-     */
-    function pushTriangle(target, triangle) {
-        pushVector(target, triangle.a);
-        pushVector(target, triangle.b);
-        pushVector(target, triangle.b);
-        pushVector(target, triangle.c);
-        pushVector(target, triangle.c);
-        pushVector(target, triangle.a);
-    }
-
     function animate() {
         const rs = Array.from(renderers.values());
 
         // for (let i = 0; i < 4; ++i) {
-            for (const renderer of rs) {
-                // renderer.setTileAt(
-                //     THREE.MathUtils.randInt(0, renderer.count),
-                //     THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-                // );
-                //renderer.setRotationAt(THREE.MathUtils.randInt(0, renderer.count), THREE.MathUtils.randInt(0, 23));
-            }
+        //     for (const renderer of rs) {
+        //         renderer.setTileAt(
+        //             THREE.MathUtils.randInt(0, renderer.count),
+        //             THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+        //         );
+        //         renderer.setRotationAt(THREE.MathUtils.randInt(0, renderer.count), THREE.MathUtils.randInt(0, 23));
+        //     }
         // }
     
         rs.forEach((r) => r.update());
@@ -330,6 +330,7 @@ async function start() {
         const left = forward.clone().cross(up).normalize();
         forward.crossVectors(up, left).normalize();
 
+        // move according to slope of ground
         if (kinematic.groundContacts.length > 0) {
             up.set(0, 0, 0);
             kinematic.groundContacts.forEach((contact) => up.add(contact.normal));
@@ -339,10 +340,6 @@ async function start() {
 
         left.crossVectors(forward, up);
         forward.crossVectors(up, left);
-        const motionUp = left.clone().cross(forward);
-
-        const test2 = new THREE.Matrix4();
-        test2.makeBasis(left, forward, motionUp);
 
         const motion = new THREE.Vector3();
 
