@@ -48,24 +48,23 @@ class PhysicsTriangle {
      * @param {THREE.Vector3} B
      * @returns {THREE.Vector3}
      */
-    closestPointToSegment(A, B) {
+    closestPointToSegment(A, B, target = new THREE.Vector3()) {
         const segmentNormal = B.clone().sub(A).normalize();
         const a = this.plane.normal.dot(segmentNormal);
 
         // segment parallel to triangle
         if (a === 0) 
-            return A.clone();
+            return target.copy(A);
 
         const p = this.triangle.a.clone().sub(A).divideScalar(a);
         const t = this.plane.normal.dot(p);
         const i = A.clone().addScaledVector(segmentNormal, t);
 
-        const closest = new THREE.Vector3();
-        this.triangle.closestPointToPoint(i, closest);
+        this.triangle.closestPointToPoint(i, target);
         _line.set(A, B);
-        _line.closestPointToPoint(closest, true, closest);
+        _line.closestPointToPoint(target, true, target);
 
-        return closest;
+        return target;
     }
 }
 
@@ -74,6 +73,8 @@ class PhysicsScene {
         /** @type {PhysicsTriangle[]} */
         this.triangles = [];
     }
+
+    testTriangles = [];
 
     /**
      * @param {PhysicsCapsule} capsule
@@ -85,7 +86,14 @@ class PhysicsScene {
         const A = position;
         const B = position.clone().addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
 
+        this.testTriangles.length = 0;
         this.triangles.forEach((triangle) => {
+            if (position.manhattanDistanceTo(triangle.triangle.a) > 1.5
+             && position.manhattanDistanceTo(triangle.triangle.b) > 1.5
+             && position.manhattanDistanceTo(triangle.triangle.c) > 1.5) return;
+
+            this.testTriangles.push(triangle);
+
             const center = triangle.closestPointToSegment(A, B);
             const closest = triangle.closestPointToPoint(center);
             const displacement = closest.clone().sub(center);

@@ -185,6 +185,23 @@ class BlockShapeInstances {
     set count(value) { this.mesh.count = value; }
     get count() { return this.mesh.count; }
 
+    static _matrix = new THREE.Matrix4();
+    static _orientation = new THREE.Vector4();
+    
+    /**
+     * @param {number} index
+     * @param {THREE.Matrix4} target
+     */
+    getMatrixAt(index, target) {
+        const _orientation = BlockShapeInstances._orientation;
+
+        _orientation.fromBufferAttribute(this.orientation, index);
+        target.copy(S4Lookup[_orientation.w]);
+        target.setPosition(_orientation.x, _orientation.y, _orientation.z);
+
+        return target;
+    }
+
     /**
      * @param {number} index
      * @param {THREE.Vector3} position
@@ -258,6 +275,36 @@ class BlockShapeInstances {
         this.faceOrients1.needsUpdate = true;
         this.faceTiles0.needsUpdate = true;
         this.faceTiles1.needsUpdate = true;
+    }
+
+    /**
+     * @returns {PhysicsTriangle[]}
+     */
+    getTriangles() {
+        const _matrix = BlockShapeInstances._matrix;
+
+        const positions = this.mesh.geometry.getAttribute('position');
+        const indexes = this.mesh.geometry.index.array;
+
+        const triangles = [];
+        for (let i = 0; i < this.count; ++i) {
+            this.getMatrixAt(i, _matrix);
+
+            for (let i = 0; i < indexes.length; i += 3) {
+                const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
+                const v0 = new THREE.Vector3().fromBufferAttribute(positions, i0);
+                const v1 = new THREE.Vector3().fromBufferAttribute(positions, i1);
+                const v2 = new THREE.Vector3().fromBufferAttribute(positions, i2);
+    
+                v0.applyMatrix4(_matrix);
+                v1.applyMatrix4(_matrix);
+                v2.applyMatrix4(_matrix);
+    
+                triangles.push(new PhysicsTriangle(v0, v1, v2));
+            }
+        }
+
+        return triangles;
     }
 }
 

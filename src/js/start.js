@@ -99,46 +99,35 @@ function makeGeometry(data) {
     return geometry;
 }
 
-let debug;
-
 async function start() {
-    debug = document.getElementById("debug");
+    const debug = document.getElementById("debug");
     const visible = document.getElementById("visible");
     const w = 320;
     const h = 240;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+    camera.position.setZ(5);
 
     const pivot = new THREE.Object3D();
     scene.add(pivot);
 
     pivot.position.set(0, 0, 0);
-    pivot.add(camera);
-
     pivot.rotation.order = "ZYX";
-
-    camera.position.z = 5;
+    pivot.add(camera);
 
     const level = new THREE.Object3D();
     scene.add(level);
 
-    const loader = new THREE.TextureLoader();
-
-    const loads = {
-        tiles: "tiles.png",
-    };
-
     const guyBackTile = 4;
     const guyFallTile = 5;
     const speakTile = 10;
-    const compassTile = 11;
 
-    const textures = Object.fromEntries(
-        await Promise.all(Object.entries(loads).map(async ([key, url]) => [key, await loader.loadAsync(url)]))
-    );
+    const loader = new THREE.TextureLoader();
+    const tilesTex = await loader.loadAsync("tiles.png");
 
-    const spriteMaterials = Object.fromEntries(Object.entries(textures).map(([key, texture]) => [key, new THREE.MeshBasicMaterial({ map: texture, alphaTest: .5, side: THREE.DoubleSide, })]));
+    tilesTex.magFilter = THREE.NearestFilter;
+    tilesTex.minFilter = THREE.NearestFilter;
 
     const geometries = {
         ramp: makeGeometry(ramp),
@@ -146,19 +135,16 @@ async function start() {
         cube: makeGeometry(cube),
         wedgeH: makeGeometry(wedgeHead),
         wedgeB: makeGeometry(wedgeBody),
-        quad: new THREE.PlaneGeometry(1, 1),
     };
+    const quad = new THREE.PlaneGeometry(1, 1);
 
-    const guy = new THREE.Mesh(geometries.quad, undefined);
+    const guy = new THREE.Mesh(quad, undefined);
     guy.visible = false;
-
-    textures.tiles.magFilter = THREE.NearestFilter;
-    textures.tiles.minFilter = THREE.NearestFilter;
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
         alphaTest: .5, 
-        map: textures.tiles,
+        map: tilesTex,
     });
     blockMaterial.onBeforeCompile = blockShapeShaderFixer;
 
@@ -166,21 +152,13 @@ async function start() {
 
     const cubeCount = 256;
 
-    const renderers = {
-        cube: new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount), 
-        ramp: new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount),
-        slab: new BlockShapeInstances(geometries.slab, blockMaterial, cubeCount),
-        wedgeH: new BlockShapeInstances(geometries.wedgeH, blockMaterial, cubeCount),
-        wedgeB: new BlockShapeInstances(geometries.wedgeB, blockMaterial, cubeCount),
+    const renderers = new Map(Object.entries(geometries).map(([key, geometry]) => [key, new BlockShapeInstances(geometry, blockMaterial, cubeCount)]));
+
+    const billboards = new BillboardInstances(quad, spriteMaterial, cubeCount);
+
+    for (const renderer of renderers.values()) {
+        scene.add(renderer.mesh);
     }
-
-    const billboards = new BillboardInstances(geometries.quad, spriteMaterial, cubeCount);
-
-    scene.add(renderers.cube.mesh);
-    scene.add(renderers.ramp.mesh);
-    scene.add(renderers.slab.mesh);
-    scene.add(renderers.wedgeH.mesh);
-    scene.add(renderers.wedgeB.mesh);
     scene.add(billboards.mesh);
     
     const kinematic = new KinematicGuy();
@@ -192,6 +170,7 @@ async function start() {
     const points = new THREE.LineSegments( pointsGeometry, material );
     points.name = "LINES"
     points.renderOrder = 1;
+    points.frustumCulled = false;
     scene.add(points);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true });
@@ -219,27 +198,34 @@ async function start() {
         return norm;
     }
 
-    /** @type {THREE.Mesh[]} */
-    const blocks = [];
-
     leveldata.blocks.forEach((block, i) => {
         const [type, position, rotation = 0] = block;
+        const renderer = renderers.get(type);
 
-        const cube = new THREE.Mesh(geometries[type], undefined);
-        cube.position.set(...position);
-        cube.rotation.setFromRotationMatrix(S4Lookup[rotation]);
-        blocks.push(cube);
-        level.add(cube);
-        cube.visible = false;
-
-        const renderer = renderers[type];
-        const index = renderer.count++;
-        renderer.setPositionAt(index, cube.position);
-        renderer.setRotationAt(index, rotation);
-        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+        for (let y = 0; y < 3; ++y) {
+            for (let x = 0; x < 3; ++x) {
+                const index = renderer.count++;
+                renderer.setPositionAt(index, new THREE.Vector3(...position).add(new THREE.Vector3(x*5, 0, y*3)));
+                renderer.setRotationAt(index, rotation);
+                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+            }
+        }
     });
 
-    /** @type {THREE.Mesh[]} */
+    const types = Array.from(renderers.keys());
+    for (let y = 0; y < 16; ++y) {
+        for (let x = 0; x < 16; ++x) {
+            const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
+            const renderer = renderers.get(type);
+
+            const index = renderer.count++;
+            renderer.setPositionAt(index, new THREE.Vector3(x, -3, y));
+            renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
+            renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+        }
+    }
+
+    /** @type {THREE.Object3D[]} */
     const billbs = [];
 
     const guyIndex = billboards.count++;
@@ -248,21 +234,13 @@ async function start() {
     const promptIndex = billboards.count++;
     billboards.setAxisAt(promptIndex, new THREE.Vector3(0, 1, 0), true);
 
-    const compassIndex = billboards.count++;
-    billboards.setAxisAt(compassIndex, new THREE.Vector3(0, 1, 0));
-    billboards.setTileAt(compassIndex, compassTile);
-
     leveldata.sprites.forEach((sprite, i) => {
         const { tile, position, vertical, text } = sprite;
-        const billb = new THREE.Mesh(geometries.quad, undefined);
+        const billb = new THREE.Object3D();
         billb.position.set(...position);
-        level.add(billb);
-
         billb.userData.vert = vertical;
         billb.userData.text = text;
-        billb.name = "sprite";
         billbs.push(billb);
-        billb.visible = false;
 
         const index = billboards.count++;
         billboards.setPositionAt(index, billb.position);
@@ -279,26 +257,11 @@ async function start() {
     level.updateMatrixWorld();
 
     const triangles = [];
-    blocks.forEach((block) => {
-        const positions = block.geometry.getAttribute('position');
-        const indexes = block.geometry.index.array;
-        const m = block.matrix;
-
-        for (let i = 0; i < indexes.length; i += 3) {
-            const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
-            const v0 = new THREE.Vector3(positions.getX(i0), positions.getY(i0), positions.getZ(i0));
-            const v1 = new THREE.Vector3(positions.getX(i1), positions.getY(i1), positions.getZ(i1));
-            const v2 = new THREE.Vector3(positions.getX(i2), positions.getY(i2), positions.getZ(i2));
-
-            v0.applyMatrix4(m);
-            v1.applyMatrix4(m);
-            v2.applyMatrix4(m);
-
-            triangles.push([v0, v1, v2]);
-        }
-    });
-
-    kinematic.scene.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
+    for (const renderer of renderers.values()) {
+        triangles.push(...renderer.getTriangles());
+    }
+    
+    kinematic.scene.triangles = triangles;
     kinematic.prevPosition.set(0, 2, 0);
 
     const held = {};
@@ -315,8 +278,21 @@ async function start() {
         target.push(vector.x, vector.y, vector.z);
     }
 
+    /**
+     * @param {number[]} target
+     * @param {THREE.Triangle} triangle
+     */
+    function pushTriangle(target, triangle) {
+        pushVector(target, triangle.a);
+        pushVector(target, triangle.b);
+        pushVector(target, triangle.b);
+        pushVector(target, triangle.c);
+        pushVector(target, triangle.c);
+        pushVector(target, triangle.a);
+    }
+
     function animate() {
-        const rs = Array.from(Object.values(renderers));
+        const rs = Array.from(renderers.values());
 
         for (let i = 0; i < 4; ++i) {
             for (const renderer of rs) {
@@ -365,10 +341,6 @@ async function start() {
         const test2 = new THREE.Matrix4();
         test2.makeBasis(left, forward, motionUp);
 
-        billboards.setPositionAt(compassIndex, kinematic.prevPosition);
-        billboards.setAxisAt(compassIndex, forward, true);
-        //compass.rotation.setFromRotationMatrix(test2);
-
         const motion = new THREE.Vector3();
 
         if (held["w"]) motion.add(forward.clone().multiplyScalar(3));
@@ -403,15 +375,11 @@ async function start() {
             for (let i = 0; i < split; ++i)
                 kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        if (false) {
-            kinematic.contacts.forEach((contact) => {
-                pushVector(pointsVerts, contact.triangle.triangle.a);
-                pushVector(pointsVerts, contact.triangle.triangle.b);
-                pushVector(pointsVerts, contact.triangle.triangle.b);
-                pushVector(pointsVerts, contact.triangle.triangle.c);
-                pushVector(pointsVerts, contact.triangle.triangle.c);
-                pushVector(pointsVerts, contact.triangle.triangle.a);
-            });
+        if (true) {
+            // kinematic.contacts.forEach((contact) => {
+            //     pushTriangle(pointsVerts, contact.triangle.triangle);
+            // });
+            kinematic.scene.testTriangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
         }
 
         if (kinematic.nextPosition.y < -5) {
@@ -435,6 +403,7 @@ async function start() {
         billboards.setTileAt(guyIndex, kinematic.hadGroundContact ? guyBackTile : guyFallTile);
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
+        pointsVerts.length = 0;
 
         //controls.target = pivot.position;
         pivot.position.lerp(guy.position, .25);
