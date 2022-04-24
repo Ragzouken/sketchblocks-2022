@@ -154,7 +154,7 @@ const wedgeHead =
         {
             name: "back",
             positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
+            texturing: [   [0, 1],    [1, 1],    [1, .5],    [0, .5]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
@@ -168,14 +168,14 @@ const wedgeHead =
         {
             name: "left",
             positions: [[1, .5, 0], [1, 0, 1], [1, 0, 0]],
-            texturing: [   [1, 1],    [0, 0],    [1, 0]],
+            texturing: [   [1, 1],    [0, .5],    [1, .5]],
             triangles: [[0, 1, 2]]
         },
 
         {
             name: "right",
             positions: [[0, 0, 1], [0, .5, 0], [0, 0, 0]],
-            texturing: [   [1, 0],    [0, 1],    [0, 0]],
+            texturing: [   [1, .5],    [0, 1],    [0, .5]],
             triangles: [[0, 1, 2]]
         },
     ],
@@ -196,21 +196,21 @@ const wedgeBody =
         {
             name: "back",
             positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, .5],    [0, .5]],
+            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "left",
             positions: [[1, .5, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
+            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "right",
             positions: [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
+            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, .5]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 

@@ -13,8 +13,8 @@ html, body {
 }
 
 #visible {
-    width: 320px;
-    height: 240px;
+    width: calc(320px*2);
+    height: calc(240px*2);
 
     outline: 1px solid black;
 

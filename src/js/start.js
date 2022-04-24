@@ -100,10 +100,13 @@ function makeGeometry(data) {
 }
 
 async function start() {
+    const stats = Stats()
+    document.body.appendChild(stats.dom)
+
     const debug = document.getElementById("debug");
     const visible = document.getElementById("visible");
-    const w = 320;
-    const h = 240;
+    const w = 320*2;
+    const h = 240*2;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
@@ -198,19 +201,19 @@ async function start() {
         return norm;
     }
 
-    leveldata.blocks.forEach((block, i) => {
-        const [type, position, rotation = 0] = block;
-        const renderer = renderers.get(type);
+    // leveldata.blocks.forEach((block, i) => {
+    //     const [type, position, rotation = 0] = block;
+    //     const renderer = renderers.get(type);
 
-        for (let y = 0; y < 3; ++y) {
-            for (let x = 0; x < 3; ++x) {
-                const index = renderer.count++;
-                renderer.setPositionAt(index, new THREE.Vector3(...position).add(new THREE.Vector3(x*5, 0, y*3)));
-                renderer.setRotationAt(index, rotation);
-                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
-            }
-        }
-    });
+    //     for (let y = 0; y < 1; ++y) {
+    //         for (let x = 0; x < 1; ++x) {
+    //             const index = renderer.count++;
+    //             renderer.setPositionAt(index, new THREE.Vector3(...position).add(new THREE.Vector3(x*5, 0, y*3)));
+    //             renderer.setRotationAt(index, rotation);
+    //             renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+    //         }
+    //     }
+    // });
 
     const types = Array.from(renderers.keys());
     for (let z = 0; z < 16; ++z) {
@@ -225,6 +228,7 @@ async function start() {
                 renderer.setPositionAt(index, new THREE.Vector3(x, -3-z, y));
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
                 renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+                // renderer.setTilesAt(index, 12, THREE.MathUtils.randInt(0, 7));
             }
         }
     }
@@ -292,14 +296,15 @@ async function start() {
     function animate() {
         const rs = Array.from(renderers.values());
 
-        for (let i = 0; i < 256; ++i) {
+        // for (let i = 0; i < 4; ++i) {
             for (const renderer of rs) {
-                renderer.setTileAt(
-                    THREE.MathUtils.randInt(0, renderer.count),
-                    THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-                );
+                // renderer.setTileAt(
+                //     THREE.MathUtils.randInt(0, renderer.count),
+                //     THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+                // );
+                //renderer.setRotationAt(THREE.MathUtils.randInt(0, renderer.count), THREE.MathUtils.randInt(0, 23));
             }
-        }
+        // }
     
         rs.forEach((r) => r.update());
         billboards.update();
@@ -388,9 +393,9 @@ async function start() {
         // kinematic.contacts.forEach((contact) => {
         //     pushTriangle(pointsVerts, contact.triangle.triangle);
         // });
-        kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
+        //kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
 
-        if (kinematic.nextPosition.y < -5) {
+        if (kinematic.nextPosition.y < -20) {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
             guy.position.copy(kinematic.prevPosition).y += (.5 - kinematic.capsule.radius);
@@ -413,11 +418,11 @@ async function start() {
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
         pointsVerts.length = 0;
 
-        //controls.target = pivot.position;
         pivot.position.lerp(guy.position, .25);
-        //controls.update();
 
         requestAnimationFrame(animate);
+
+        stats.update()
     };
 
     animate();
