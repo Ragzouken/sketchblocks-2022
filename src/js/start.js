@@ -14,147 +14,6 @@ function scaleElementToParent(element) {
     return scale;
 }
 
-
-const cube = {
-    name: "cube",
-
-    faces: [
-        {
-            name: "front",
-            positions: [[0, 1, 1], [0, 0, 1], [1, 0, 1], [1, 1, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "left",
-            positions: [[1, 1, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "right",
-            positions: [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "top",
-            positions: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "bottom",
-            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-    ],
-}
-
-const ramp =
-{
-    name: "ramp",
-
-    faces:
-    [
-        {
-            name: "slope",
-            positions: [[0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 0]],
-            texturing: [   [1, 1],    [1, 0],    [0, 0],    [0, 1]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "bottom",
-            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "left",
-            positions: [[1, 1, 0], [1, 0, 1], [1, 0, 0]],
-            texturing: [   [1, 1],    [0, 0],    [1, 0]],
-            triangles: [[0, 1, 2]]
-        },
-
-        {
-            name: "right",
-            positions: [[0, 0, 1], [0, 1, 0], [0, 0, 0]],
-            texturing: [   [1, 0],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2]]
-        },
-    ],
-}
-
-const slab =
-{
-    name: "slab",
-
-    faces: [
-        {
-            name: "front",
-            positions: [[0, .5, 1], [0, 0, 1], [1, 0, 1], [1, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, .5],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "left",
-            positions: [[1, .5, 1], [1, 0, 1], [1, 0, 0], [1, .5, 0]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "right",
-            positions: [[0, .5, 0], [0, 0, 0], [0, 0, 1], [0, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "top",
-            positions: [[0, .5, 1], [1, .5, 1], [1, .5, 0], [0, .5, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "bottom",
-            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-    ],
-}
-
 const leveldata = {
     blocks: [
         ["ramp", [ 0, -1,  1], 14],
@@ -168,6 +27,9 @@ const leveldata = {
         ["slab", [ 0,  0,  1], 8],
         ["slab", [ 1,  0,  1], 8],
 
+        ["wedgeH", [-2, 1, 0], 22],
+        ["wedgeB", [-2, 0, 0], 22],
+
         ["cube", [-1,  1,  0]],
         ["ramp", [ 0,  1,  0], 10],
         ["ramp", [-1,  1, -1], 13],
@@ -179,8 +41,8 @@ const leveldata = {
     ],
 
     sprites: [
-        { tile: "pillar", position: [ 0, 3.5, -1], vertical: true, text: "so refined.."},
-        { tile: "orb", position: [1,  1,  -1], text: "I AM ORB." },
+        { tile: 8, position: [ 0, 3.5, -1], vertical: true, text: "so refined.."},
+        { tile: 6, position: [1,  1,  -1], text: "I AM ORB." },
     ],
 }
 
@@ -250,8 +112,6 @@ async function start() {
 
     pivot.position.set(0, 0, 0);
     pivot.add(camera);
-    //pivot.position.y = 1;
-    //pivot.rotation.x = -Math.PI / 8;
 
     pivot.rotation.order = "ZYX";
 
@@ -262,26 +122,14 @@ async function start() {
 
     const loader = new THREE.TextureLoader();
 
-    const [crateTex, guyTex, guyFallTex] = await Promise.all([
-        "crate.png",
-        "guy-back.png",
-        "guy-fall.png", 
-    ].map((url) => loader.loadAsync(url)));
-
     const loads = {
-        pillar: "pillar.png",
-        orb: "orb.png",
-        orbSmall: "orb-small.png",
-        pointer: "pointer.png",
-        compass: "compass.png",
-
-        guyBack: "guy-back.png",
-        guyFall: "guy-fall.png",
-
-        enter: "enter.png",
-        speak: "speak.png",
         tiles: "tiles.png",
     };
+
+    const guyBackTile = 4;
+    const guyFallTile = 5;
+    const speakTile = 10;
+    const compassTile = 11;
 
     const textures = Object.fromEntries(
         await Promise.all(Object.entries(loads).map(async ([key, url]) => [key, await loader.loadAsync(url)]))
@@ -293,50 +141,25 @@ async function start() {
         ramp: makeGeometry(ramp),
         slab: makeGeometry(slab),
         cube: makeGeometry(cube),
+        wedgeH: makeGeometry(wedgeHead),
+        wedgeB: makeGeometry(wedgeBody),
         quad: new THREE.PlaneGeometry(1, 1),
     };
 
-    const dummy = new THREE.Mesh();
-
-    const guy = new THREE.Mesh(geometries.quad, spriteMaterials.guyBack);
-    const actionIcon = new THREE.Mesh(geometries.quad, spriteMaterials.speak);
-
-    scene.add(actionIcon);
+    const guy = new THREE.Mesh(geometries.quad, undefined);
+    guy.visible = false;
 
     textures.tiles.magFilter = THREE.NearestFilter;
     textures.tiles.minFilter = THREE.NearestFilter;
-
-    const test = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: textures.tiles });
-    test.onBeforeCompile = shaderChanger2;
-    
-    function shaderChanger(shader) {
-        shader.vertexShader = shader.vertexShader.replace(
-            "#include <begin_vertex>", 
-            "#include <begin_vertex>; transformed -= normal * 0.001;",
-        );
-    };
-
-    function shaderChanger2(shader) {
-        shader.uniforms.tileScale = { value: 1/16 };
-        shader.vertexShader = shader.vertexShader.replace(
-            "#include <common>", 
-            "#include <common>\nuniform float tileScale; attribute float instanceTile; ",
-        );
-        shader.vertexShader = shader.vertexShader.replace(
-            "#include <uv_vertex>", 
-            "#include <uv_vertex>\nvUv.x += instanceTile; vUv.x *= tileScale;",
-        );
-        shader.vertexShader = shader.vertexShader.replace(
-            "#include <project_vertex>", 
-            "#include <project_vertex>\nmat3 invView = inverse(mat3(modelViewMatrix)); gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(invView * position, 1.0);",
-        );
-    };
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
         alphaTest: .5, 
         map: textures.tiles,
     });
+    blockMaterial.onBeforeCompile = blockShapeShaderFixer;
+
+    const spriteMaterial = blockMaterial.clone();
 
     const cubeCount = 256;
 
@@ -344,13 +167,17 @@ async function start() {
         cube: new BlockShapeInstances(geometries.cube, blockMaterial, cubeCount), 
         ramp: new BlockShapeInstances(geometries.ramp, blockMaterial, cubeCount),
         slab: new BlockShapeInstances(geometries.slab, blockMaterial, cubeCount),
+        wedgeH: new BlockShapeInstances(geometries.wedgeH, blockMaterial, cubeCount),
+        wedgeB: new BlockShapeInstances(geometries.wedgeB, blockMaterial, cubeCount),
     }
 
-    const billboards = new BillboardInstances(geometries.quad, blockMaterial, cubeCount);
+    const billboards = new BillboardInstances(geometries.quad, spriteMaterial, cubeCount);
 
     scene.add(renderers.cube.mesh);
     scene.add(renderers.ramp.mesh);
     scene.add(renderers.slab.mesh);
+    scene.add(renderers.wedgeH.mesh);
+    scene.add(renderers.wedgeB.mesh);
     scene.add(billboards.mesh);
     
     const kinematic = new KinematicGuy();
@@ -389,29 +216,19 @@ async function start() {
         return norm;
     }
 
-    const compass = new THREE.Mesh(geometries.quad, spriteMaterials.compass);
-    scene.add(compass);
-
     /** @type {THREE.Mesh[]} */
     const blocks = [];
-
-    renderers.cube.count = 0;
-    renderers.ramp.count = 0;
-    renderers.slab.count = 0;
 
     leveldata.blocks.forEach((block, i) => {
         const [type, position, rotation = 0] = block;
 
-        const cube = new THREE.Mesh(geometries[type], test);
+        const cube = new THREE.Mesh(geometries[type], undefined);
         cube.position.set(...position);
         cube.rotation.setFromRotationMatrix(S4Lookup[rotation]);
-        
-        cube.name = "block";
-
-        level.add(cube);
         blocks.push(cube);
-
+        level.add(cube);
         cube.visible = false;
+
         const renderer = renderers[type];
         const index = renderer.count++;
         renderer.setPositionAt(index, cube.position);
@@ -422,18 +239,34 @@ async function start() {
     /** @type {THREE.Mesh[]} */
     const billbs = [];
 
+    const guyIndex = billboards.count++;
+    billboards.setAxisAt(guyIndex, new THREE.Vector3(0, 1, 0), true);
+
+    const promptIndex = billboards.count++;
+    billboards.setAxisAt(promptIndex, new THREE.Vector3(0, 1, 0), true);
+
+    const compassIndex = billboards.count++;
+    billboards.setAxisAt(compassIndex, new THREE.Vector3(0, 1, 0));
+    billboards.setTileAt(compassIndex, compassTile);
+
     leveldata.sprites.forEach((sprite, i) => {
         const { tile, position, vertical, text } = sprite;
-        const billb = new THREE.Mesh(geometries.quad, spriteMaterials[tile]);
+        const billb = new THREE.Mesh(geometries.quad, undefined);
         billb.position.set(...position);
         level.add(billb);
 
         billb.userData.vert = vertical;
         billb.userData.text = text;
         billb.name = "sprite";
-
         billbs.push(billb);
+        billb.visible = false;
+
+        const index = billboards.count++;
+        billboards.setPositionAt(index, billb.position);
+        billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), vertical);
+        billboards.setTileAt(index, tile);
     });
+    billboards.update();
 
     billbs.push(guy);
     guy.userData.vert = true;
@@ -465,22 +298,8 @@ async function start() {
     kinematic.scene.triangles = triangles.map(([v0, v1, v2]) => new PhysicsTriangle(v0, v1, v2));
     kinematic.prevPosition.set(0, 2, 0);
 
-    //const controls = new OrbitControls(camera, renderer.domElement);
-    //controls.rotateSpeed = .25;
-
     const held = {};
     let pressed = {};
-
-    for (let i = 0; i < billboards.count; ++i) {
-        dummy.position.set(
-            (.5 - Math.random()) * 3, 
-            (.5 - Math.random()) * 3, 
-            (.5 - Math.random()) * 3,
-        );
-
-        billboards.setPositionAt(i, dummy.position);
-        billboards.setTileAt(i, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
-    }
 
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
@@ -494,54 +313,28 @@ async function start() {
     }
 
     function animate() {
-        camera.getWorldDirection(forward);
-        camera.getWorldQuaternion(cameraQuat);
-
-        const { twist } = swingTwistDecompose(cameraQuat, new THREE.Vector3(0, 1, 0));
-
-        let nearby;
-
-        billbs.forEach((bilb) => {
-            if (!bilb.userData.vert) {
-                bilb.rotation.setFromQuaternion(cameraQuat);
-            } else {
-                bilb.rotation.setFromQuaternion(twist);
-            }
-
-            if (bilb === guy) return;
-
-            if (bilb.userData.text && bilb.position.distanceTo(guy.position) < .8) {
-                nearby = bilb;
-            }
-        });
+        const rs = Array.from(Object.values(renderers));
 
         for (let i = 0; i < 4; ++i) {
-            renderers.cube.setTileAt(
-                THREE.MathUtils.randInt(0, renderers.cube.count),
-                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-            );
-            renderers.slab.setTileAt(
-                THREE.MathUtils.randInt(0, renderers.slab.count),
-                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-            );
-            renderers.ramp.setTileAt(
-                THREE.MathUtils.randInt(0, renderers.ramp.count),
-                THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-            );
-            billboards.setTileAt(
-                THREE.MathUtils.randInt(0, billboards.count),
-                THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-            );
+            for (const renderer of rs) {
+                renderer.setTileAt(
+                    THREE.MathUtils.randInt(0, renderer.count),
+                    THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
+                );
+            }
         }
     
-        renderers.cube.update();
-        renderers.ramp.update();
-        renderers.slab.update();
+        rs.forEach((r) => r.update());
         billboards.update();
 
-        if (nearby) actionIcon.position.copy(nearby.position).add(new THREE.Vector3(0, 1, 0));
-        actionIcon.rotation.setFromQuaternion(twist);
-        actionIcon.visible = dialogue.hidden && nearby !== undefined;
+        const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < .8);
+
+        if (nearby && dialogue.hidden) {
+            billboards.setPositionAt(promptIndex, new THREE.Vector3().copy(nearby.position).add(new THREE.Vector3(0, 1, 0)));
+            billboards.setTileAt(promptIndex, speakTile);
+        } else {
+            billboards.setPositionAt(promptIndex, new THREE.Vector3(0, 1, 0));
+        }
 
         renderer.render(scene, camera);
 
@@ -549,6 +342,8 @@ async function start() {
         // raycaster.setFromCamera(norm, camera);
         // const [first] = raycaster.intersectObject(level, true);
 
+        camera.getWorldDirection(forward);
+        camera.getWorldQuaternion(cameraQuat);
         const up = kinematic.upVector.clone();
         const left = forward.clone().cross(up).normalize();
         forward.crossVectors(up, left).normalize();
@@ -567,8 +362,9 @@ async function start() {
         const test2 = new THREE.Matrix4();
         test2.makeBasis(left, forward, motionUp);
 
-        compass.position.copy(kinematic.prevPosition);
-        compass.rotation.setFromRotationMatrix(test2);
+        billboards.setPositionAt(compassIndex, kinematic.prevPosition);
+        billboards.setAxisAt(compassIndex, forward, true);
+        //compass.rotation.setFromRotationMatrix(test2);
 
         const motion = new THREE.Vector3();
 
@@ -615,10 +411,6 @@ async function start() {
             });
         }
 
-        compass.visible = false;
-
-        guy.material.map = kinematic.hadGroundContact ? guyTex : guyFallTex;
-
         if (kinematic.nextPosition.y < -5) {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
@@ -635,6 +427,9 @@ async function start() {
 
         guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
         guy.position.multiplyScalar(.5);
+
+        billboards.setPositionAt(guyIndex, guy.position);
+        billboards.setTileAt(guyIndex, kinematic.hadGroundContact ? guyBackTile : guyFallTile);
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
 

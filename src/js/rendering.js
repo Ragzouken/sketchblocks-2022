@@ -77,7 +77,7 @@ vec2 getTileData() {
 
 const quadTileDefines = tileDefines + `
 attribute vec3 instancePosition;
-attribute vec3 instanceAxis;
+attribute vec4 instanceAxis;
 attribute vec2 instanceTile;
 
 vec2 getTileData() {
@@ -134,13 +134,21 @@ gl_Position = combined * mvPosition;
     #endif
 `);
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
-vec4 mvPosition = vec4(inverse(mat3(viewMatrix)) * transformed, 1.0);
+vec4 mvPosition = vec4(transformed, 1.0);
+
+vec3 forward = -inverse(modelViewMatrix)[2].xyz;
+vec3 up      = instanceAxis.xyz;
+vec3 left    = normalize(cross(forward, up));
+up           = mix(normalize(cross(left, forward)), up, instanceAxis.w);
+forward      = cross(left, up);
+
 mat4 quadMatrix = mat4(1.0);
+quadMatrix[0].xyz = left;
+quadMatrix[1].xyz = up;
+quadMatrix[2].xyz = forward;
 quadMatrix[3].xyz = instancePosition;
 
-mat4 combined = projectionMatrix * modelViewMatrix * quadMatrix;
-
-gl_Position = combined * mvPosition;
+gl_Position = projectionMatrix * modelViewMatrix * quadMatrix * mvPosition;
         `.trim(),
     );
 };
@@ -155,9 +163,6 @@ class BlockShapeInstances {
      * @param {number} count
      */
     constructor(geometry, material, count) {
-        material = material.clone();
-        material.onBeforeCompile = blockShapeShaderFixer;
-
         this.orientation = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
         this.orientation.setUsage(THREE.DynamicDrawUsage);
 
@@ -168,6 +173,7 @@ class BlockShapeInstances {
 
         this.mesh = new THREE.InstancedMesh(geometry.clone(), material, count);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.mesh.count = 0;
 
         this.mesh.geometry.setAttribute("instanceOrientation", this.orientation);
         this.mesh.geometry.setAttribute("faceTiles0", this.faceTiles0);
@@ -268,7 +274,7 @@ class BillboardInstances {
         this.position = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
         this.position.setUsage(THREE.DynamicDrawUsage);
 
-        this.axis = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.axis = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
         this.axis.setUsage(THREE.DynamicDrawUsage);
         
         this.tile = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
@@ -276,6 +282,7 @@ class BillboardInstances {
 
         this.mesh = new THREE.InstancedMesh(geometry.clone(), material, count);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.mesh.count = 0;
 
         this.mesh.geometry.setAttribute("instancePosition", this.position);
         this.mesh.geometry.setAttribute("instanceAxis", this.axis);
@@ -291,6 +298,15 @@ class BillboardInstances {
      */
     setPositionAt(index, position) {
         this.position.setXYZ(index, position.x, position.y, position.z);
+    }
+
+    /**
+     * @param {number} index
+     * @param {THREE.Vector3} axis
+     * @param {boolean} pinned
+     */
+    setAxisAt(index, axis, pinned=false) {
+        this.axis.setXYZW(index, axis.x, axis.y, axis.z, pinned ? 1 : 0);
     }
 
     /**
