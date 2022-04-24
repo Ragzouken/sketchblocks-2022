@@ -22,9 +22,6 @@ class PhysicsCapsule {
 }
 
 const _line = new THREE.Line3();
-const _closest = new THREE.Vector3();
-const _normal = new THREE.Vector3();
-const _A = new THREE.Vector3();
 
 class PhysicsTriangle {
     /**
@@ -52,22 +49,23 @@ class PhysicsTriangle {
      * @returns {THREE.Vector3}
      */
     closestPointToSegment(A, B) {
-        const segmentNormal = _normal.copy(B).sub(A).normalize();
+        const segmentNormal = B.clone().sub(A).normalize();
         const a = this.plane.normal.dot(segmentNormal);
 
         // segment parallel to triangle
         if (a === 0) 
             return A.clone();
 
-        const p = this.triangle.a.clone().addScaledVector(A, -a);
+        const p = this.triangle.a.clone().sub(A).divideScalar(a);
         const t = this.plane.normal.dot(p);
-        const i = _A.copy(A).addScaledVector(segmentNormal, t);
+        const i = A.clone().addScaledVector(segmentNormal, t);
 
-        this.triangle.closestPointToPoint(i, _closest);
+        const closest = new THREE.Vector3();
+        this.triangle.closestPointToPoint(i, closest);
         _line.set(A, B);
-        _line.closestPointToPoint(_closest, true, _closest);
+        _line.closestPointToPoint(closest, true, closest);
 
-        return _closest.clone();
+        return closest;
     }
 }
 
