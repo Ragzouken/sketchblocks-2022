@@ -36,12 +36,14 @@ class PhysicsTriangle {
     
     /**
      * @param {THREE.Vector3} point
-     * @returns {THREE.Vector3}
+     * @param {THREE.Vector3} target
      */
-    closestPointToPoint(point) {
-        const closest = new THREE.Vector3();
-        return this.triangle.closestPointToPoint(point, closest);
+    closestPointToPoint(point, target) {
+        return this.triangle.closestPointToPoint(point, target);
     }
+
+    static _normal = new THREE.Vector3();
+    static _point = new THREE.Vector3();
 
     /**
      * @param {THREE.Vector3} A
@@ -49,16 +51,19 @@ class PhysicsTriangle {
      * @returns {THREE.Vector3}
      */
     closestPointToSegment(A, B, target = new THREE.Vector3()) {
-        const segmentNormal = B.clone().sub(A).normalize();
+        const segmentNormal = PhysicsTriangle._normal;
+        const point = PhysicsTriangle._point;
+
+        segmentNormal.subVectors(B, A).normalize();
         const a = this.plane.normal.dot(segmentNormal);
 
         // segment parallel to triangle
         if (a === 0) 
             return target.copy(A);
 
-        const p = this.triangle.a.clone().sub(A).divideScalar(a);
-        const t = this.plane.normal.dot(p);
-        const i = A.clone().addScaledVector(segmentNormal, t);
+        point.subVectors(this.triangle.a, A).divideScalar(a);
+        const t = this.plane.normal.dot(point);
+        const i = point.copy(A).addScaledVector(segmentNormal, t);
 
         this.triangle.closestPointToPoint(i, target);
         _line.set(A, B);
@@ -74,6 +79,10 @@ class PhysicsScene {
         this.triangles = [];
     }
 
+    static _b = new THREE.Vector3();
+    static _center = new THREE.Vector3();
+    static _closest = new THREE.Vector3();
+
     /**
      * @param {PhysicsCapsule} capsule
      * @param {THREE.Vector3} position
@@ -81,23 +90,23 @@ class PhysicsScene {
     getCapsuleContacts(capsule, position) {
         const contacts = [];
 
+        const center = PhysicsScene._center;
+        const closest = PhysicsScene._closest;
+
         const A = position;
-        const B = position.clone().addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
-
+        const B = PhysicsScene._b;
+        B.copy(A).addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
+        
         this.triangles.forEach((triangle) => {
-            if (position.manhattanDistanceTo(triangle.triangle.a) > 1.5
-             && position.manhattanDistanceTo(triangle.triangle.b) > 1.5
-             && position.manhattanDistanceTo(triangle.triangle.c) > 1.5) return;
-
-            const center = triangle.closestPointToSegment(A, B);
-            const closest = triangle.closestPointToPoint(center);
-            const displacement = closest.clone().sub(center);
-            const penetration = capsule.radius - displacement.length();
+            triangle.closestPointToSegment(A, B, center);
+            triangle.closestPointToPoint(center, closest);
+            const penetration = capsule.radius - closest.distanceTo(center);
 
             if (penetration > 0) {
+                const displacement = closest.clone().sub(center);
                 const normal = displacement.clone().multiplyScalar(-1).normalize();
                 contacts.push({ 
-                    displacement, 
+                    displacement,
                     normal, 
                     penetration, 
                     world: closest, 

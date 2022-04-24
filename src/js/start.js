@@ -216,6 +216,8 @@ async function start() {
     for (let z = 0; z < 16; ++z) {
         for (let y = 0; y < 16; ++y) {
             for (let x = 0; x < 16; ++x) {
+                if (Math.random() < .5) continue;
+
                 const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
                 const renderer = renderers.get(type);
 
@@ -290,7 +292,7 @@ async function start() {
     function animate() {
         const rs = Array.from(renderers.values());
 
-        for (let i = 0; i < 4; ++i) {
+        for (let i = 0; i < 256; ++i) {
             for (const renderer of rs) {
                 renderer.setTileAt(
                     THREE.MathUtils.randInt(0, renderer.count),

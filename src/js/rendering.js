@@ -325,8 +325,6 @@ class BlockShapeInstances {
         const positions = this.mesh.geometry.getAttribute('position');
         const indexes = this.mesh.geometry.index.array;
 
-        const triangle = new THREE.Triangle();
-
         for (let i = 0; i < this.count; ++i) {
             this.getPositionAt(i, cube.min);
             cube.max.copy(cube.min);
