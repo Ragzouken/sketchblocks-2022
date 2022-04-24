@@ -22,6 +22,9 @@ class PhysicsCapsule {
 }
 
 const _line = new THREE.Line3();
+const _closest = new THREE.Vector3();
+const _normal = new THREE.Vector3();
+const _A = new THREE.Vector3();
 
 class PhysicsTriangle {
     /**
@@ -49,23 +52,22 @@ class PhysicsTriangle {
      * @returns {THREE.Vector3}
      */
     closestPointToSegment(A, B) {
-        const segmentNormal = B.clone().sub(A).normalize();
+        const segmentNormal = _normal.copy(B).sub(A).normalize();
         const a = this.plane.normal.dot(segmentNormal);
 
         // segment parallel to triangle
         if (a === 0) 
             return A.clone();
 
-        const p = this.triangle.a.clone().sub(A).divideScalar(a);
+        const p = this.triangle.a.clone().addScaledVector(A, -a);
         const t = this.plane.normal.dot(p);
-        const i = A.clone().addScaledVector(segmentNormal, t);
+        const i = _A.copy(A).addScaledVector(segmentNormal, t);
 
-        const closest = new THREE.Vector3();
-        this.triangle.closestPointToPoint(i, closest);
+        this.triangle.closestPointToPoint(i, _closest);
         _line.set(A, B);
-        _line.closestPointToPoint(closest, true, closest);
+        _line.closestPointToPoint(_closest, true, _closest);
 
-        return closest;
+        return _closest.clone();
     }
 }
 
@@ -111,7 +113,7 @@ class PhysicsScene {
 class KinematicGuy {
     constructor() {
         this.gravity = 9;
-        this.maxSlopeAngle = (Math.PI * .5) * .65;
+        this.maxSlopeAngle = (Math.PI * .5) * .55;
         this.stepHeight = .6;
         this.jumpControl = .5;
         this.maxVelocity = 10;

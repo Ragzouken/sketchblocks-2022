@@ -30,6 +30,9 @@ const leveldata = {
         ["wedgeH", [-2, 1, 0], 22],
         ["wedgeB", [-2, 0, 0], 22],
 
+        ["wedgeH", [-3, 4, 0], 18],
+        ["wedgeB", [-3, 3, 0], 18],
+
         ["cube", [-1,  1,  0]],
         ["ramp", [ 0,  1,  0], 10],
         ["ramp", [-1,  1, -1], 13],
@@ -456,27 +459,4 @@ async function start() {
     window.addEventListener("keyup", (event) => {
         held[event.key] = false;
     });
-}
-
-/**
- * @param {THREE.Quaternion} rotation
- * @param {THREE.Vector3} axis
- */
-function swingTwistDecompose(rotation, axis)
-{
-    const ra = new THREE.Vector3(rotation.x, rotation.y, rotation.z);
-    const p = ra.projectOnVector(axis);
-
-    const d = axis.dot(ra);
-
-    const twist = new THREE.Quaternion(p.x, p.y, p.z, rotation.w).normalize();
-    if (d < 0) {
-        twist.x *= -1;
-        twist.y *= -1;
-        twist.z *= -1;
-        twist.w *= -1;
-    }
-    const swing = rotation.clone().multiply(twist.clone().conjugate());
-
-    return { swing, twist };
 }
