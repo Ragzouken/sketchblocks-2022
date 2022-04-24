@@ -63,8 +63,8 @@ const leveldata = {
 
         ["slab", [ 0,  3, -1], 0],
 
-        ["wedgeH", [3, 0, 1], 0, [12, 12, 12, 12.4, 12, 12]],
-        ["wedgeB", [3, 0, 0], 0, [12, 12, 12, 12.4, 12, 12]],
+        ["wedgeH", [3, 0, 1], 0, [13, 12, 12, 12.4, 12, 12]],
+        ["wedgeB", [3, 0, 0], 0, [13, 12, 12, 12.4, 12, 12]],
     ],
 
     sprites: [
@@ -328,23 +328,30 @@ async function start() {
         const [first] = raycaster.intersectObject(level, true);
 
         if (first) {
-            const mesh = /** @type {THREE.InstancedMesh} */ (first.object);
+            const mesh = /** @type {BlockShapeInstances} */ (first.object);
             const positions = mesh.geometry.getAttribute("position");
             const uvs = mesh.geometry.getAttribute("uvSpecial");
+            mesh.getMatrixAt(first.instanceId, matrix);
+
             const indexes = mesh.geometry.index.array;
             const i = first.faceIndex*3;
+
             const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
+            vector.fromBufferAttribute(uvs, i0);
+            const face = vector.z;
+
             triangle.setFromAttributeAndIndices(positions, i0, i1, i2);
-            mesh.getMatrixAt(first.instanceId, matrix);
             triangle.a.applyMatrix4(matrix);
             triangle.b.applyMatrix4(matrix);
             triangle.c.applyMatrix4(matrix);
 
-            vector.fromBufferAttribute(uvs, i0);
-
             pushTriangle(pointsVerts, triangle);
 
-            debug.textContent = `instance: ${first?.instanceId}, face: ${vector.z}`;
+            debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (press e to randomise face)`;
+
+            if (pressed["e"]) {
+                mesh.setTileAt(first.instanceId, face, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+            }
         }
 
         camera.getWorldDirection(forward);
