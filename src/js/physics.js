@@ -74,8 +74,6 @@ class PhysicsScene {
         this.triangles = [];
     }
 
-    testTriangles = [];
-
     /**
      * @param {PhysicsCapsule} capsule
      * @param {THREE.Vector3} position
@@ -86,13 +84,10 @@ class PhysicsScene {
         const A = position;
         const B = position.clone().addScaledVector(capsule.up, capsule.height - capsule.radius * 2);
 
-        this.testTriangles.length = 0;
         this.triangles.forEach((triangle) => {
             if (position.manhattanDistanceTo(triangle.triangle.a) > 1.5
              && position.manhattanDistanceTo(triangle.triangle.b) > 1.5
              && position.manhattanDistanceTo(triangle.triangle.c) > 1.5) return;
-
-            this.testTriangles.push(triangle);
 
             const center = triangle.closestPointToSegment(A, B);
             const closest = triangle.closestPointToPoint(center);

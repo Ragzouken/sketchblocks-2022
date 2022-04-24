@@ -153,9 +153,6 @@ gl_Position = projectionMatrix * modelViewMatrix * quadMatrix * mvPosition;
     );
 };
 
-const _matrix = new THREE.Matrix4();
-const _vector = new THREE.Vector4();
-
 class BlockShapeInstances {
     /**
      * @param {THREE.BufferGeometry} geometry
@@ -185,6 +182,7 @@ class BlockShapeInstances {
     set count(value) { this.mesh.count = value; }
     get count() { return this.mesh.count; }
 
+    static _box = new THREE.Box3();
     static _matrix = new THREE.Matrix4();
     static _orientation = new THREE.Vector4();
     
@@ -200,6 +198,14 @@ class BlockShapeInstances {
         target.setPosition(_orientation.x, _orientation.y, _orientation.z);
 
         return target;
+    }
+
+    /**
+     * @param {number} index
+     * @param {THREE.Vector3} target
+     */
+    getPositionAt(index, target) {
+        target.fromBufferAttribute(this.orientation, index);
     }
 
     /**
@@ -305,6 +311,54 @@ class BlockShapeInstances {
         }
 
         return triangles;
+    }
+
+    /**
+     * @param {THREE.Box3} bounds
+     */
+    getTrianglesInBounds(bounds, target) {
+        const _matrix = BlockShapeInstances._matrix;
+        const cube = BlockShapeInstances._box;
+
+        const offset = new THREE.Vector3(.5, .5, .5);
+
+        const positions = this.mesh.geometry.getAttribute('position');
+        const indexes = this.mesh.geometry.index.array;
+
+        const triangle = new THREE.Triangle();
+
+        for (let i = 0; i < this.count; ++i) {
+            this.getPositionAt(i, cube.min);
+            cube.max.copy(cube.min);
+
+            cube.min.sub(offset);
+            cube.max.add(offset);
+
+            if (!bounds.intersectsBox(cube)) continue;
+
+            this.getMatrixAt(i, _matrix);
+
+            for (let i = 0; i < indexes.length; i += 3) {
+                // const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
+
+                // triangle.setFromAttributeAndIndices(positions, i0, i1, i2);
+                // triangle.a.applyMatrix4(_matrix);
+                // triangle.b.applyMatrix4(_matrix);
+                // triangle.c.applyMatrix4(_matrix);
+                // target.push(new PhysicsTriangle(triangle.a, triangle.b, triangle.c));
+
+                const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
+                const v0 = new THREE.Vector3().fromBufferAttribute(positions, i0);
+                const v1 = new THREE.Vector3().fromBufferAttribute(positions, i1);
+                const v2 = new THREE.Vector3().fromBufferAttribute(positions, i2);
+    
+                v0.applyMatrix4(_matrix);
+                v1.applyMatrix4(_matrix);
+                v2.applyMatrix4(_matrix);
+    
+                target.push(new PhysicsTriangle(v0, v1, v2));
+            }
+        }
     }
 }
 

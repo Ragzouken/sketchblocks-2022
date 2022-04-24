@@ -150,7 +150,7 @@ async function start() {
 
     const spriteMaterial = blockMaterial.clone();
 
-    const cubeCount = 256;
+    const cubeCount = 4096;
 
     const renderers = new Map(Object.entries(geometries).map(([key, geometry]) => [key, new BlockShapeInstances(geometry, blockMaterial, cubeCount)]));
 
@@ -213,18 +213,20 @@ async function start() {
     });
 
     const types = Array.from(renderers.keys());
-    for (let y = 0; y < 16; ++y) {
-        for (let x = 0; x < 16; ++x) {
-            const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
-            const renderer = renderers.get(type);
+    for (let z = 0; z < 16; ++z) {
+        for (let y = 0; y < 16; ++y) {
+            for (let x = 0; x < 16; ++x) {
+                const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
+                const renderer = renderers.get(type);
 
-            const index = renderer.count++;
-            renderer.setPositionAt(index, new THREE.Vector3(x, -3, y));
-            renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
-            renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+                const index = renderer.count++;
+                renderer.setPositionAt(index, new THREE.Vector3(x, -3-z, y));
+                renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
+                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+            }
         }
     }
-
+    
     /** @type {THREE.Object3D[]} */
     const billbs = [];
 
@@ -255,13 +257,7 @@ async function start() {
     guy.position.setY(2);
 
     level.updateMatrixWorld();
-
-    const triangles = [];
-    for (const renderer of renderers.values()) {
-        triangles.push(...renderer.getTriangles());
-    }
     
-    kinematic.scene.triangles = triangles;
     kinematic.prevPosition.set(0, 2, 0);
 
     const held = {};
@@ -368,6 +364,18 @@ async function start() {
 
         kinematic.stepHeight = .55;
 
+        const bounds = new THREE.Box3(
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 0),
+        ).expandByScalar(.5);
+        bounds.min.add(kinematic.prevPosition);
+        bounds.max.add(kinematic.prevPosition);
+
+        kinematic.scene.triangles.length = 0;
+        for (const renderer of renderers.values()) {
+            renderer.getTrianglesInBounds(bounds, kinematic.scene.triangles);
+        }
+
         // hack. cause: falling too fast correctly avoid bullet hole but doesn't
         // allow you to actually touch the ground
         const split = 3 - Math.floor(kinematic.gravityVelocity.y);
@@ -375,12 +383,10 @@ async function start() {
             for (let i = 0; i < split; ++i)
                 kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        if (true) {
-            // kinematic.contacts.forEach((contact) => {
-            //     pushTriangle(pointsVerts, contact.triangle.triangle);
-            // });
-            kinematic.scene.testTriangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
-        }
+        // kinematic.contacts.forEach((contact) => {
+        //     pushTriangle(pointsVerts, contact.triangle.triangle);
+        // });
+        kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
 
         if (kinematic.nextPosition.y < -5) {
             kinematic.nextPosition.y = 5;
