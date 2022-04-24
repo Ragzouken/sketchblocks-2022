@@ -190,9 +190,9 @@ async function start() {
     const billboards = new BillboardInstances(new THREE.PlaneGeometry(1, 1), spriteMaterial, cubeCount);
 
     for (const renderer of renderers.values()) {
-        scene.add(renderer.mesh);
+        level.add(renderer);
     }
-    scene.add(billboards.mesh);
+    scene.add(billboards);
 
     // points
     const pointsVerts = [];
@@ -292,6 +292,9 @@ async function start() {
 
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
+    const triangle = new THREE.Triangle();
+    const matrix = new THREE.Matrix4();
+    const vector = new THREE.Vector3();
 
     function animate() {
         const rs = Array.from(renderers.values());
@@ -320,9 +323,29 @@ async function start() {
 
         renderer.render(scene, camera);
 
-        // const norm = getNormalisePointer();
-        // raycaster.setFromCamera(norm, camera);
-        // const [first] = raycaster.intersectObject(level, true);
+        const norm = getNormalisePointer();
+        raycaster.setFromCamera(norm, camera);
+        const [first] = raycaster.intersectObject(level, true);
+
+        if (first) {
+            const mesh = /** @type {THREE.InstancedMesh} */ (first.object);
+            const positions = mesh.geometry.getAttribute("position");
+            const uvs = mesh.geometry.getAttribute("uvSpecial");
+            const indexes = mesh.geometry.index.array;
+            const i = first.faceIndex*3;
+            const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
+            triangle.setFromAttributeAndIndices(positions, i0, i1, i2);
+            mesh.getMatrixAt(first.instanceId, matrix);
+            triangle.a.applyMatrix4(matrix);
+            triangle.b.applyMatrix4(matrix);
+            triangle.c.applyMatrix4(matrix);
+
+            vector.fromBufferAttribute(uvs, i0);
+
+            pushTriangle(pointsVerts, triangle);
+
+            debug.textContent = `instance: ${first?.instanceId}, face: ${vector.z}`;
+        }
 
         camera.getWorldDirection(forward);
         camera.getWorldQuaternion(cameraQuat);
@@ -403,8 +426,6 @@ async function start() {
         function vec2str(vector) {
             return `${vector.x.toPrecision(2)},${vector.y.toPrecision(2)},${vector.z.toPrecision(2)}`
         }
-
-        debug.textContent = `iterations: ${split} // pos: ${vec2str(kinematic.prevPosition)}`;
 
         guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
         guy.position.multiplyScalar(.5);
