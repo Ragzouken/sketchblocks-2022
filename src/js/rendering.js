@@ -87,6 +87,7 @@ float offset = dot(norm, vec3(0.0, 0.0, 1.0));
 mvPosition.xyz -= normal * clamp(offset, 0.0, 1.0) * 0.001;
 
 gl_Position = combined * mvPosition;
+if (tile.x == 0.0) gl_Position = vec4(0.0);
         `.trim(),
     );
 };
@@ -126,6 +127,11 @@ gl_Position = projectionMatrix * modelViewMatrix * quadMatrix * mvPosition;
     );
 };
 
+function makeVec4InstancedBufferAttribute(count, usage=THREE.DynamicDrawUsage) {
+    const array = new Float32Array(count * 4);
+    return new THREE.InstancedBufferAttribute(array, 4).setUsage(usage);
+}
+
 class BlockShapeInstances extends THREE.InstancedMesh {
     /**
      * @param {THREE.BufferGeometry} geometry
@@ -136,13 +142,11 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         super(geometry.clone(), material, count);
         this.count = 0;
 
-        this.orientation = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
-        this.orientation.setUsage(THREE.DynamicDrawUsage);
-
-        this.faceTiles0 = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4).setUsage(THREE.DynamicDrawUsage);
-        this.faceTiles1 = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4).setUsage(THREE.DynamicDrawUsage);
-        this.faceOrients0 = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4).setUsage(THREE.DynamicDrawUsage);
-        this.faceOrients1 = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4).setUsage(THREE.DynamicDrawUsage);
+        this.orientation = makeVec4InstancedBufferAttribute(count);
+        this.faceTiles0 = makeVec4InstancedBufferAttribute(count);
+        this.faceTiles1 = makeVec4InstancedBufferAttribute(count);
+        this.faceOrients0 = makeVec4InstancedBufferAttribute(count);
+        this.faceOrients1 = makeVec4InstancedBufferAttribute(count);
 
         this.geometry.setAttribute("instanceOrientation", this.orientation);
         this.geometry.setAttribute("faceTiles0", this.faceTiles0);
@@ -151,10 +155,64 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         this.geometry.setAttribute("faceOrients1", this.faceOrients1);
     }
 
+    static _sphere = new THREE.Sphere();
     static _box = new THREE.Box3();
     static _matrix = new THREE.Matrix4();
     static _orientation = new THREE.Vector4();
-    
+    static _mesh = new THREE.Mesh();
+    static _intersects = [];
+
+    /**
+     * @param {number} triangle
+     * @returns {number}
+     */
+    getFaceIndex(triangle) {
+        const uvs = this.geometry.getAttribute("uvSpecial");
+        const face = uvs.getZ(this.geometry.index.array[triangle * 3]);
+        return face;
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} face
+     * @returns {THREE.Triangle[]}
+     */
+    getFaceTriangles(index, face) {
+        this.getMatrixAt(index, BlockShapeInstances._matrix);
+        const triCount = this.geometry.index.count / 3;
+        const triangles = [];
+
+        for (let i = 0; i < triCount; ++i) {
+            if (this.getFaceIndex(i) === face) {
+                const triangle = new THREE.Triangle();
+                this.getTriangleAt(index, i, triangle);
+                triangles.push(triangle);
+            }
+        }
+
+        return triangles;
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} triangle
+     * @param {THREE.Triangle} target
+     */
+    getTriangleAt(index, triangle, target) {
+        this.getMatrixAt(index, BlockShapeInstances._matrix);
+        const indexes = this.geometry.index.array;
+        const i = triangle * 3;
+
+        target.setFromAttributeAndIndices(
+            this.geometry.getAttribute("position"), 
+            indexes[i+0], indexes[i+1], indexes[i+2],
+        );
+
+        target.a.applyMatrix4(BlockShapeInstances._matrix);
+        target.b.applyMatrix4(BlockShapeInstances._matrix);
+        target.c.applyMatrix4(BlockShapeInstances._matrix);
+    }
+
     /**
      * @param {number} index
      * @param {THREE.Matrix4} target
@@ -215,6 +273,35 @@ class BlockShapeInstances extends THREE.InstancedMesh {
     /**
      * @param {number} index
      * @param {number} face
+     * @returns {number[]}
+     */
+     getTileAt(index, face) {
+        let tile, rotation;
+
+        if (face === 0) tile = this.faceTiles0.getX(index);
+        if (face === 1) tile = this.faceTiles0.getY(index);
+        if (face === 2) tile = this.faceTiles0.getZ(index);
+        if (face === 3) tile = this.faceTiles0.getW(index);
+        if (face === 4) tile = this.faceTiles1.getX(index);
+        if (face === 5) tile = this.faceTiles1.getY(index);
+        if (face === 6) tile = this.faceTiles1.getZ(index);
+        if (face === 7) tile = this.faceTiles1.getW(index);
+
+        if (face === 0) rotation = this.faceOrients0.getX(index);
+        if (face === 1) rotation = this.faceOrients0.getY(index);
+        if (face === 2) rotation = this.faceOrients0.getZ(index);
+        if (face === 3) rotation = this.faceOrients0.getW(index);
+        if (face === 4) rotation = this.faceOrients1.getX(index);
+        if (face === 5) rotation = this.faceOrients1.getY(index);
+        if (face === 6) rotation = this.faceOrients1.getZ(index);
+        if (face === 7) rotation = this.faceOrients1.getW(index);
+
+        return [tile, rotation];
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} face
      * @param {number} tile 
      * @param {number} rotation
      */
@@ -252,77 +339,65 @@ class BlockShapeInstances extends THREE.InstancedMesh {
     }
 
     /**
-     * @returns {PhysicsTriangle[]}
+     * @param {THREE.Raycaster} raycaster
+     * @param {THREE.Intersection[]} intersects
      */
-    getTriangles() {
-        const _matrix = BlockShapeInstances._matrix;
+    raycast(raycaster, intersects) {
+        BlockShapeInstances._sphere.radius = 1 * Math.sqrt(3);
 
-        const positions = this.geometry.getAttribute('position');
-        const indexes = this.geometry.index.array;
+        BlockShapeInstances._mesh.geometry = this.geometry;
+        BlockShapeInstances._mesh.material = this.material;
 
-        const triangles = [];
-        for (let i = 0; i < this.count; ++i) {
-            this.getMatrixAt(i, _matrix);
+        for (let index = 0; index < this.count; ++index) {
+            this.getPositionAt(index, BlockShapeInstances._sphere.center);
+            if (!raycaster.ray.intersectsSphere(BlockShapeInstances._sphere)) continue;
 
-            for (let i = 0; i < indexes.length; i += 3) {
-                const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
-                const v0 = new THREE.Vector3().fromBufferAttribute(positions, i0);
-                const v1 = new THREE.Vector3().fromBufferAttribute(positions, i1);
-                const v2 = new THREE.Vector3().fromBufferAttribute(positions, i2);
-    
-                v0.applyMatrix4(_matrix);
-                v1.applyMatrix4(_matrix);
-                v2.applyMatrix4(_matrix);
-    
-                triangles.push(new PhysicsTriangle(v0, v1, v2));
-            }
+            this.getMatrixAt(index, BlockShapeInstances._matrix);
+            BlockShapeInstances._mesh.matrixWorld = BlockShapeInstances._matrix;
+            BlockShapeInstances._mesh.raycast(raycaster, BlockShapeInstances._intersects);
+
+            for (let i = 0; i < BlockShapeInstances._intersects.length; ++i) {
+				const intersect = BlockShapeInstances._intersects[i];
+				intersect.instanceId = index;
+				intersect.object = this;
+				intersects.push(intersect);
+			}
+
+			BlockShapeInstances._intersects.length = 0;
         }
-
-        return triangles;
     }
 
     /**
      * @param {THREE.Box3} bounds
      */
     getTrianglesInBounds(bounds, target) {
-        const _matrix = BlockShapeInstances._matrix;
-        const cube = BlockShapeInstances._box;
-
         const offset = new THREE.Vector3(.5, .5, .5);
 
         const positions = this.geometry.getAttribute('position');
         const indexes = this.geometry.index.array;
 
         for (let i = 0; i < this.count; ++i) {
-            this.getPositionAt(i, cube.min);
-            cube.max.copy(cube.min);
+            this.getPositionAt(i, BlockShapeInstances._box.min);
+            BlockShapeInstances._box.max.copy(BlockShapeInstances._box.min);
+            BlockShapeInstances._box.min.sub(offset);
+            BlockShapeInstances._box.max.add(offset);
 
-            cube.min.sub(offset);
-            cube.max.add(offset);
+            if (!bounds.intersectsBox(BlockShapeInstances._box)) continue;
 
-            if (!bounds.intersectsBox(cube)) continue;
-
-            this.getMatrixAt(i, _matrix);
+            this.getMatrixAt(i, BlockShapeInstances._matrix);
 
             for (let i = 0; i < indexes.length; i += 3) {
-                // const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
-
-                // triangle.setFromAttributeAndIndices(positions, i0, i1, i2);
-                // triangle.a.applyMatrix4(_matrix);
-                // triangle.b.applyMatrix4(_matrix);
-                // triangle.c.applyMatrix4(_matrix);
-                // target.push(new PhysicsTriangle(triangle.a, triangle.b, triangle.c));
-
-                const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
-                const v0 = new THREE.Vector3().fromBufferAttribute(positions, i0);
-                const v1 = new THREE.Vector3().fromBufferAttribute(positions, i1);
-                const v2 = new THREE.Vector3().fromBufferAttribute(positions, i2);
-    
-                v0.applyMatrix4(_matrix);
-                v1.applyMatrix4(_matrix);
-                v2.applyMatrix4(_matrix);
-    
-                target.push(new PhysicsTriangle(v0, v1, v2));
+                const triangle = new PhysicsTriangle();
+                triangle.setFromAttributeAndIndices(
+                    positions, 
+                    indexes[i+0], 
+                    indexes[i+1], 
+                    indexes[i+2],
+                );
+                triangle.a.applyMatrix4(BlockShapeInstances._matrix);
+                triangle.b.applyMatrix4(BlockShapeInstances._matrix);
+                triangle.c.applyMatrix4(BlockShapeInstances._matrix);
+                target.push(triangle);
             }
         }
     }
@@ -341,11 +416,12 @@ class BillboardInstances extends THREE.InstancedMesh {
         super(geometry.clone(), material, count);
         this.count = 0;
 
+        this.cameraWorldDirection = new THREE.Vector3();
+
         this.positions = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
         this.positions.setUsage(THREE.DynamicDrawUsage);
 
-        this.axis = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
-        this.axis.setUsage(THREE.DynamicDrawUsage);
+        this.axis = makeVec4InstancedBufferAttribute(count);
         
         this.tile = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
         this.tile.setUsage(THREE.DynamicDrawUsage);
@@ -353,6 +429,87 @@ class BillboardInstances extends THREE.InstancedMesh {
         this.geometry.setAttribute("instancePosition", this.positions);
         this.geometry.setAttribute("instanceAxis", this.axis);
         this.geometry.setAttribute("instanceTile", this.tile);
+    }
+
+    static _matrix = new THREE.Matrix4();
+    static _position = new THREE.Vector4();
+    static _axis = new THREE.Vector4();
+    static _xAxis = new THREE.Vector3();
+    static _yAxis = new THREE.Vector3();
+    static _zAxis = new THREE.Vector3();
+
+    /**
+     * @param {number} index
+     * @returns {THREE.Triangle[]}
+     */
+    getFaceTriangles(index) {
+        this.getMatrixAt(index, BillboardInstances._matrix);
+        const triCount = this.geometry.index.count / 3;
+        const triangles = [];
+
+        for (let i = 0; i < triCount; ++i) {
+            const triangle = new THREE.Triangle();
+            this.getTriangleAt(index, i, triangle);
+            triangles.push(triangle);
+        }
+
+        return triangles;
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} triangle
+     * @param {THREE.Triangle} target
+     */
+    getTriangleAt(index, triangle, target) {
+        this.getMatrixAt(index, BillboardInstances._matrix);
+        const indexes = this.geometry.index.array;
+        const i = triangle * 3;
+
+        target.setFromAttributeAndIndices(
+            this.geometry.getAttribute("position"), 
+            indexes[i+0], indexes[i+1], indexes[i+2],
+        );
+
+        target.a.applyMatrix4(BillboardInstances._matrix);
+        target.b.applyMatrix4(BillboardInstances._matrix);
+        target.c.applyMatrix4(BillboardInstances._matrix);
+    }
+
+    /**
+     * @param {number} index
+     * @param {THREE.Matrix4} target
+     */
+    getMatrixAt(index, target) {
+        const _position = BillboardInstances._position;
+        const _axis = BillboardInstances._axis;
+
+        _position.fromBufferAttribute(this.positions, index);
+        _axis.fromBufferAttribute(this.axis, index);
+
+        BillboardInstances._zAxis.copy(this.cameraWorldDirection);
+        BillboardInstances._yAxis.set(_axis.x, _axis.y, _axis.z);
+        BillboardInstances._xAxis.crossVectors(
+            BillboardInstances._zAxis, 
+            BillboardInstances._yAxis,
+        ).normalize();
+
+        if (_axis.w === 0) {
+            BillboardInstances._yAxis.crossVectors(
+                BillboardInstances._xAxis, 
+                BillboardInstances._zAxis,
+            ).normalize();
+        }
+
+        target.identity();
+        target.makeBasis(
+            BillboardInstances._xAxis, 
+            BillboardInstances._yAxis, 
+            BillboardInstances._zAxis,
+        );
+        target.setPosition(_position.x, _position.y, _position.z);
+
+        return target;
     }
 
     /**

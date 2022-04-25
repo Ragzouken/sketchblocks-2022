@@ -183,6 +183,24 @@ async function start() {
     });
     blockMaterial.onBeforeCompile = blockShapeShaderFixer;
 
+    const selectCubeGeo = new THREE.BoxGeometry();
+    const selectCubeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: tilesTex });
+    const selectCubeMes = new THREE.Mesh(selectCubeGeo, selectCubeMat);
+
+    const uvs = selectCubeGeo.getAttribute("uv");
+    function remap(i, tile) {
+        let [x, y] = [uvs.getX(i), uvs.getY(i)]; 
+        x = (x + tile) / 16;
+        y = (y + 0) / 16;
+        uvs.setXY(i, x, y);
+    }
+    for (let i = 4; i < uvs.count; ++i) remap(i, 7);
+    for (let i = 0; i < 4; ++i) remap(i, 2);
+    selectCubeMes.position.set(0, 0, 1);
+    selectCubeMes.scale.multiplyScalar(1.01);
+    scene.add(selectCubeMes);
+    selectCubeMes.visible = false;
+
     const spriteMaterial = blockMaterial.clone();
 
     const cubeCount = 4096;
@@ -192,7 +210,7 @@ async function start() {
     for (const renderer of renderers.values()) {
         level.add(renderer);
     }
-    scene.add(billboards);
+    level.add(billboards);
 
     // points
     const pointsVerts = [];
@@ -236,10 +254,12 @@ async function start() {
         });
     });
 
+    const cubeSize = 32;
+
     const types = Array.from(renderers.keys());
-    for (let z = 0; z < 16; ++z) {
-        for (let y = 0; y < 16; ++y) {
-            for (let x = 0; x < 16; ++x) {
+    for (let z = 0; z < cubeSize; ++z) {
+        for (let y = 0; y < cubeSize; ++y) {
+            for (let x = 0; x < cubeSize; ++x) {
                 if (Math.random() < .5) continue;
 
                 const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
@@ -248,11 +268,13 @@ async function start() {
                 const index = renderer.count++;
                 renderer.setPositionAt(index, new THREE.Vector3(x-8, -2-z, y-8));
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
-                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
-                // renderer.setTilesAt(index, 12, THREE.MathUtils.randInt(0, 7));
+                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), 0);
+                // renderer.setTilesAt(index, 0, THREE.MathUtils.randInt(0, 7));
             }
         }
     }
+
+    console.log(Math.max(...Array.from(renderers.values()).map((r) => r.count)));
     
     /** @type {THREE.Object3D[]} */
     const billbs = [];
@@ -328,31 +350,33 @@ async function start() {
         const [first] = raycaster.intersectObject(level, true);
 
         if (first) {
-            const mesh = /** @type {BlockShapeInstances} */ (first.object);
-            const positions = mesh.geometry.getAttribute("position");
-            const uvs = mesh.geometry.getAttribute("uvSpecial");
-            mesh.getMatrixAt(first.instanceId, matrix);
+            if (first.object === billboards) {
+                const mesh = /** @type {BillboardInstances} */ (first.object);
+                mesh.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
-            const indexes = mesh.geometry.index.array;
-            const i = first.faceIndex*3;
+                if (pressed["Mouse"]) {
+                    mesh.setTileAt(first.instanceId, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+                }
+            } else {
+                const mesh = /** @type {BlockShapeInstances} */ (first.object);
+                
+                const face = mesh.getFaceIndex(first.faceIndex);
+                mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
-            const [i0, i1, i2] = [indexes[i+0], indexes[i+1], indexes[i+2]];
-            vector.fromBufferAttribute(uvs, i0);
-            const face = vector.z;
+                debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (click to rotate face)`;
 
-            triangle.setFromAttributeAndIndices(positions, i0, i1, i2);
-            triangle.a.applyMatrix4(matrix);
-            triangle.b.applyMatrix4(matrix);
-            triangle.c.applyMatrix4(matrix);
+                mesh.getPositionAt(first.instanceId, selectCubeMes.position);
 
-            pushTriangle(pointsVerts, triangle);
-
-            debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (press e to randomise face)`;
-
-            if (pressed["e"]) {
-                mesh.setTileAt(first.instanceId, face, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+                if (pressed["Mouse"]) {
+                    let [tile, rotation] = mesh.getTileAt(first.instanceId, face);
+                    rotation = (rotation + 1) % 4;
+                    // tile = 2;
+                    mesh.setTileAt(first.instanceId, face, tile, rotation);
+                }
             }
         }
+
+        camera.getWorldDirection(billboards.cameraWorldDirection);
 
         camera.getWorldDirection(forward);
         camera.getWorldQuaternion(cameraQuat);
@@ -457,6 +481,16 @@ async function start() {
         requestAnimationFrame(update);
     }
     update();
+
+    window.addEventListener("pointerdown", (event) => {
+        held["Mouse"] = true;
+        pressed["Mouse"] = true;
+        event.preventDefault();
+    });
+
+    window.addEventListener("pointerdown", (event) => {
+        held["Mouse"] = false;
+    });
 
     window.addEventListener("keydown", (event) => {
         held[event.key] = true;

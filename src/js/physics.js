@@ -21,53 +21,37 @@ class PhysicsCapsule {
     }
 }
 
-const _line = new THREE.Line3();
-
-class PhysicsTriangle {
-    /**
-     * @param {THREE.Vector3} p0
-     * @param {THREE.Vector3} p1
-     * @param {THREE.Vector3} p2
-     */
-    constructor(p0, p1, p2) {
-        this.triangle = new THREE.Triangle(p0, p1, p2);
-        this.plane = this.triangle.getPlane(new THREE.Plane());
-    }
-    
-    /**
-     * @param {THREE.Vector3} point
-     * @param {THREE.Vector3} target
-     */
-    closestPointToPoint(point, target) {
-        return this.triangle.closestPointToPoint(point, target);
-    }
-
-    static _normal = new THREE.Vector3();
+class PhysicsTriangle extends THREE.Triangle {
+    static _segmentNormal = new THREE.Vector3();
+    static _planeNormal = new THREE.Vector3();
     static _point = new THREE.Vector3();
+    static _line = new THREE.Line3();
 
     /**
      * @param {THREE.Vector3} A
      * @param {THREE.Vector3} B
      * @returns {THREE.Vector3}
      */
-    closestPointToSegment(A, B, target = new THREE.Vector3()) {
-        const segmentNormal = PhysicsTriangle._normal;
+    closestPointToSegment(A, B, target) {
+        const segmentNormal = PhysicsTriangle._segmentNormal;
         const point = PhysicsTriangle._point;
 
+        this.getNormal(PhysicsTriangle._planeNormal);
+
         segmentNormal.subVectors(B, A).normalize();
-        const a = this.plane.normal.dot(segmentNormal);
+        const a = PhysicsTriangle._planeNormal.dot(segmentNormal);
 
         // segment parallel to triangle
         if (a === 0) 
             return target.copy(A);
 
-        point.subVectors(this.triangle.a, A).divideScalar(a);
-        const t = this.plane.normal.dot(point);
+        point.subVectors(this.a, A).divideScalar(a);
+        const t = PhysicsTriangle._planeNormal.dot(point);
         const i = point.copy(A).addScaledVector(segmentNormal, t);
 
-        this.triangle.closestPointToPoint(i, target);
-        _line.set(A, B);
-        _line.closestPointToPoint(target, true, target);
+        this.closestPointToPoint(i, target);
+        PhysicsTriangle._line.set(A, B);
+        PhysicsTriangle._line.closestPointToPoint(target, true, target);
 
         return target;
     }
