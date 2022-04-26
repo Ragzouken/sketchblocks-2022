@@ -123,8 +123,6 @@ function makeGeometry(data) {
     return geometry;
 }
 
-let blockUniforms;
-
 async function start() {
     const stats = Stats()
     document.body.appendChild(stats.dom)
@@ -178,12 +176,22 @@ async function start() {
     const kinematic = new KinematicGuy();
     const guy = new THREE.Object3D();
 
+    const blockDesignData = new BlockDesignData(8, 4, 32);
+    for (let i = 0; i < blockDesignData.count; ++i) {
+        blockDesignData.setDesignAt(i, randomDesign());
+    }
+    blockDesignData.setDesignAt(0, randomDesign(4));
+
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
         alphaTest: .5, 
         map: tilesTex,
     });
-    blockMaterial.onBeforeCompile = blockShapeShaderFixer;
+    blockMaterial.onBeforeCompile = function (shader) {
+        blockMaterial.uniforms = shader.uniforms;
+        blockShapeShaderFixer(shader);
+        shader.uniforms.blockDesigns.value = blockDesignData;
+    }
 
     const selectCubeGeo = new THREE.BoxGeometry();
     const selectCubeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: tilesTex });
@@ -245,11 +253,6 @@ async function start() {
         const index = renderer.count++;
         renderer.setPositionAt(index, new THREE.Vector3(...position));
         renderer.setRotationAt(index, rotation);
-        renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
-
-        tiles.forEach((tile, face) => {
-            renderer.setTileAt(index, face, Math.floor(tile), Math.floor((tile % 1) * 10));
-        });
     });
 
     const cubeSize = 32;
@@ -266,9 +269,9 @@ async function start() {
                 const index = renderer.count++;
                 renderer.setPositionAt(index, new THREE.Vector3(x-8, -2-z, y-8));
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
-                renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), 0);
+                // renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), 0);
                 // renderer.setTilesAt(index, 0, THREE.MathUtils.randInt(0, 7));
-                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, 4));
+                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, blockDesignData.count));
             }
         }
     }
@@ -320,7 +323,7 @@ async function start() {
     const rs = Array.from(renderers.values());
 
     function animate() {
-        if (blockUniforms) blockUniforms.frame.value = frame;
+        if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
         if (timer == 0) frame = (frame + 1) % 4;
 
         timer = (timer + 1) % 20;
@@ -372,10 +375,22 @@ async function start() {
                 mesh.getPositionAt(first.instanceId, selectCubeMes.position);
 
                 if (pressed["Mouse"]) {
-                    let [tile, rotation] = mesh.getTileAt(first.instanceId, face);
+                    const designIndex = mesh.getDesignAt(first.instanceId);
+                    const design = [];
+                    blockDesignData.getDesignAt(designIndex, design);
+
+                    const index = frame * 16 + face * 2;
+                    let [tile, rotation] = [design[index + 0], design[index + 1]];
                     rotation = (rotation + 1) % 4;
-                    // tile = 2;
-                    mesh.setTileAt(first.instanceId, face, tile, rotation);
+                    // tile = 2
+                    design[index + 1] = rotation;
+
+                    for (let i = 0; i < 4; ++i) {
+                        design[i * 16 + face * 2 + 1] = rotation;
+                    }
+
+                    blockDesignData.setDesignAt(designIndex, design);
+                    blockDesignData.update();
                 }
             }
         }

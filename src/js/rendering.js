@@ -35,30 +35,17 @@ precision highp usampler2D;
 
 attribute vec4 instanceOrientation;
 attribute vec3 uvSpecial;
-
-attribute vec4 faceTiles0;
-attribute vec4 faceTiles1;
-attribute vec4 faceOrients0;
-attribute vec4 faceOrients1;
-
 attribute int design;
 
-uniform usampler2D dataTex;
+uniform usampler2D blockDesigns;
 uniform int frame;
 
 vec2 getTileData() {
-    float faceIndex = uvSpecial.z;
-    vec4 faceTiles = faceIndex <= 3.0 ? faceTiles0 : faceTiles1;
-    vec4 faceRots = faceIndex <= 3.0 ? faceOrients0 : faceOrients1;
-
-    int index = int(mod(faceIndex, 4.0));
-    float tileIndex = faceTiles[index];
-    float rotIndex = faceRots[index];
-
-    int designIndex = design % 2;
-    tileIndex = float(texelFetch(dataTex, ivec2(frame, designIndex), 0));
+    int faceIndex = int(uvSpecial.z);
+    uint tileIndex = texelFetch(blockDesigns, ivec2(frame*16 + faceIndex*2 + 0, design), 0).r;
+    uint rotIndex = texelFetch(blockDesigns, ivec2(frame*16 + faceIndex*2 + 1, design), 0).r;
     
-    return vec2(tileIndex, rotIndex);
+    return vec2(float(tileIndex), rotIndex);
 }
 `;
 
@@ -79,42 +66,29 @@ const tileUVs = `
     #endif
 `;
 
-const data = new Uint8Array([
-    16, 17, 18, 19,
-    16, 17, 18, 19,
-]);
-const dataTex = new THREE.DataTexture(data, 4, 2, THREE.RedIntegerFormat, THREE.UnsignedByteType);
-dataTex.internalFormat = 'R8UI';
-dataTex.needsUpdate = true;
+function randomDesign(tile = undefined, rot = undefined) {
+    const design = [];
 
-// const includePattern = /^[ \t]*#include +<([\w\d./]+)>/gm;
+    tile = tile ?? THREE.MathUtils.randInt(0, 64);
+    rot = rot ?? THREE.MathUtils.randInt(0, 7);
 
-// function resolveIncludes(string) {
-// 	return string.replace(includePattern, includeReplacer);
-// }
-
-// function includeReplacer(match, include) {
-// 	const string = THREE.ShaderChunk[include];
-// 	if ( string === undefined ) {
-// 		throw new Error('Can not resolve #include <' + include + '>');
-// 	}
-// 	return resolveIncludes(string);
-// }
-
-// console.log(resolveIncludes(`
-// #include <project_vertex>
-// `));
+    for (let f = 0; f < 4; ++f) {
+        for (let s = 0; s < 8; ++s) {
+            design.push(tile*4+f, rot);
+        }
+    }
+    return design;
+}
 
 /** 
  * @param {THREE.Shader} shader
  */
 function blockShapeShaderFixer(shader) {
-    blockUniforms = shader.uniforms;
     shader.uniforms.frame = { value: 1 };
     shader.uniforms.tileScale = { value: 1/16 };
     shader.uniforms.S4Lookup = { value: S4Lookup };
     shader.uniforms.D2Lookup = { value: D2Lookup };
-    shader.uniforms.dataTex = { value: dataTex };
+    shader.uniforms.blockDesigns = { value: undefined };
 
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
 ` + blockTileDefines);
@@ -142,6 +116,7 @@ gl_Position = combined * mvPosition;
  * @param {THREE.Shader} shader
  */
  function billboardShaderFixer(shader) {
+    this.uniforms = shader.uniforms;
     shader.uniforms.tileScale = { value: 1/16 };
     shader.uniforms.D2Lookup = { value: D2Lookup };
 
@@ -173,9 +148,57 @@ gl_Position = projectionMatrix * modelViewMatrix * quadMatrix * mvPosition;
     );
 };
 
-function makeVec4InstancedBufferAttribute(count, usage=THREE.DynamicDrawUsage) {
-    const array = new Float32Array(count * 4);
-    return new THREE.InstancedBufferAttribute(array, 4).setUsage(usage);
+class BlockDesignData extends THREE.DataTexture {
+    /**
+     * @param {number} faces
+     * @param {number} frames
+     * @param {number} count
+     */
+    constructor(faces, frames, count) {
+        const stride = faces * frames * 2;
+        const data = new Uint8Array(stride * count);
+
+        super(data, stride, count, THREE.RedIntegerFormat, THREE.UnsignedByteType);
+        
+        this.internalFormat = /** @type {THREE.PixelFormatGPU} */ ("R8UI");
+        this.needsUpdate = true;
+
+        this.data = data;
+        this.faces = faces;
+        this.frames = frames;
+        this.count = count;
+
+        this.view = new DataView(data.buffer, 0, data.byteLength);
+    }
+
+    /**
+     * @param {number} index
+     * @param {number[]} target
+     */
+    getDesignAt(index, target) {
+        const stride = this.faces * this.frames * 2;
+        
+        target.length = stride;
+        for (let i = 0; i < stride; ++i) {
+            target[i] = this.view.getUint8(index * stride + i);
+        }
+    }
+
+    /**
+     * @param {number} index
+     * @param {number[]} design
+     */
+    setDesignAt(index, design) {
+        const stride = this.faces * this.frames * 2;
+        
+        for (let i = 0; i < stride; ++i) {
+            this.view.setUint8(index * stride + i, design[i]);
+        }
+    }
+
+    update() {
+        this.needsUpdate = true;
+    }
 }
 
 class BlockShapeInstances extends THREE.InstancedMesh {
@@ -188,19 +211,12 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         super(geometry.clone(), material, count);
         this.count = 0;
 
-        this.orientation = makeVec4InstancedBufferAttribute(count);
-        this.faceTiles0 = makeVec4InstancedBufferAttribute(count);
-        this.faceTiles1 = makeVec4InstancedBufferAttribute(count);
-        this.faceOrients0 = makeVec4InstancedBufferAttribute(count);
-        this.faceOrients1 = makeVec4InstancedBufferAttribute(count);
+        this.orientation = new THREE.InstancedBufferAttribute(new Float32Array(4 * count), 4)
+        .setUsage(THREE.DynamicDrawUsage);
         this.design = new THREE.InstancedBufferAttribute(new Int32Array(count), 1)
         .setUsage(THREE.DynamicDrawUsage);
 
         this.geometry.setAttribute("instanceOrientation", this.orientation);
-        this.geometry.setAttribute("faceTiles0", this.faceTiles0);
-        this.geometry.setAttribute("faceTiles1", this.faceTiles1);
-        this.geometry.setAttribute("faceOrients0", this.faceOrients0);
-        this.geometry.setAttribute("faceOrients1", this.faceOrients1);
         this.geometry.setAttribute("design", this.design);
     }
 
@@ -303,97 +319,21 @@ class BlockShapeInstances extends THREE.InstancedMesh {
 
     /**
      * @param {number} index
+     */
+    getDesignAt(index) {
+        return this.design.getX(index);
+    }
+
+    /**
+     * @param {number} index
      * @param {number} design
      */
     setDesignAt(index, design) {
         this.design.setX(index, design);
     }
 
-    /**
-     * @param {number} index
-     * @param {number} tile
-     */
-    setTilesAt(index, tile, rot=0) {
-        // this.mesh.getMatrixAt(index, _matrix);
-        // _matrix.set(
-        //     tile, tile, tile, tile,
-        //     tile, tile, tile, tile,
-        //     rot,  rot,  rot,  rot,
-        //     rot,  rot,  rot,  rot,
-        // );
-        // this.mesh.setMatrixAt(index, _matrix);
-        this.faceTiles0.setXYZW(index, tile, tile, tile, tile);
-        this.faceTiles1.setXYZW(index, tile, tile, tile, tile);
-        this.faceOrients0.setXYZW(index, rot, rot, rot, rot);
-        this.faceOrients1.setXYZW(index, rot, rot, rot, rot);
-    }
-
-    /**
-     * @param {number} index
-     * @param {number} face
-     * @returns {number[]}
-     */
-     getTileAt(index, face) {
-        let tile, rotation;
-
-        if (face === 0) tile = this.faceTiles0.getX(index);
-        if (face === 1) tile = this.faceTiles0.getY(index);
-        if (face === 2) tile = this.faceTiles0.getZ(index);
-        if (face === 3) tile = this.faceTiles0.getW(index);
-        if (face === 4) tile = this.faceTiles1.getX(index);
-        if (face === 5) tile = this.faceTiles1.getY(index);
-        if (face === 6) tile = this.faceTiles1.getZ(index);
-        if (face === 7) tile = this.faceTiles1.getW(index);
-
-        if (face === 0) rotation = this.faceOrients0.getX(index);
-        if (face === 1) rotation = this.faceOrients0.getY(index);
-        if (face === 2) rotation = this.faceOrients0.getZ(index);
-        if (face === 3) rotation = this.faceOrients0.getW(index);
-        if (face === 4) rotation = this.faceOrients1.getX(index);
-        if (face === 5) rotation = this.faceOrients1.getY(index);
-        if (face === 6) rotation = this.faceOrients1.getZ(index);
-        if (face === 7) rotation = this.faceOrients1.getW(index);
-
-        return [tile, rotation];
-    }
-
-    /**
-     * @param {number} index
-     * @param {number} face
-     * @param {number} tile 
-     * @param {number} rotation
-     */
-    setTileAt(index, face, tile, rotation=0) {
-        // this.mesh.getMatrixAt(index, _matrix);
-        // _matrix.elements[face] = tile;
-        // _matrix.elements[face+8] = rotation;
-        // this.mesh.setMatrixAt(index, _matrix);
-
-        if (face === 0) this.faceTiles0.setX(index, tile);
-        if (face === 1) this.faceTiles0.setY(index, tile);
-        if (face === 2) this.faceTiles0.setZ(index, tile);
-        if (face === 3) this.faceTiles0.setW(index, tile);
-        if (face === 4) this.faceTiles1.setX(index, tile);
-        if (face === 5) this.faceTiles1.setY(index, tile);
-        if (face === 6) this.faceTiles1.setZ(index, tile);
-        if (face === 7) this.faceTiles1.setW(index, tile);
-
-        if (face === 0) this.faceOrients0.setX(index, rotation);
-        if (face === 1) this.faceOrients0.setY(index, rotation);
-        if (face === 2) this.faceOrients0.setZ(index, rotation);
-        if (face === 3) this.faceOrients0.setW(index, rotation);
-        if (face === 4) this.faceOrients1.setX(index, rotation);
-        if (face === 5) this.faceOrients1.setY(index, rotation);
-        if (face === 6) this.faceOrients1.setZ(index, rotation);
-        if (face === 7) this.faceOrients1.setW(index, rotation);
-    }
-
     update() {
         this.orientation.needsUpdate = true;
-        this.faceOrients0.needsUpdate = true;
-        this.faceOrients1.needsUpdate = true;
-        this.faceTiles0.needsUpdate = true;
-        this.faceTiles1.needsUpdate = true;
         this.design.needsUpdate = true;
     }
 
@@ -480,7 +420,8 @@ class BillboardInstances extends THREE.InstancedMesh {
         this.positions = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
         this.positions.setUsage(THREE.DynamicDrawUsage);
 
-        this.axis = makeVec4InstancedBufferAttribute(count);
+        this.axis = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4);
+        this.axis.setUsage(THREE.DynamicDrawUsage);
         
         this.tile = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
         this.tile.setUsage(THREE.DynamicDrawUsage);
