@@ -17,16 +17,22 @@ vec2 mapTile(vec2 uv, int tile, int orientation) {
 `;
 
 const cubeDefines = `
-uniform mat4[24] S4Lookup;
+uniform mat3[24] S4Lookup;
 
 mat4 mapCube(vec3 position, int orientation) {
-    mat4 matrix = S4Lookup[orientation];
+    mat4 matrix = mat4(1.0);
+    mat3 rotation = S4Lookup[orientation];
+    matrix[0].xyz = rotation[0];
+    matrix[1].xyz = rotation[1];
+    matrix[2].xyz = rotation[2];
     matrix[3].xyz = position;
     return matrix;
 }
 `;
 
 const blockTileDefines = tileDefines + cubeDefines + `
+precision highp usampler2D;
+
 attribute vec4 instanceOrientation;
 attribute vec3 uvSpecial;
 
@@ -34,6 +40,11 @@ attribute vec4 faceTiles0;
 attribute vec4 faceTiles1;
 attribute vec4 faceOrients0;
 attribute vec4 faceOrients1;
+
+attribute int design;
+
+uniform usampler2D dataTex;
+uniform int frame;
 
 vec2 getTileData() {
     float faceIndex = uvSpecial.z;
@@ -44,6 +55,9 @@ vec2 getTileData() {
     float tileIndex = faceTiles[index];
     float rotIndex = faceRots[index];
 
+    int designIndex = design % 2;
+    tileIndex = float(texelFetch(dataTex, ivec2(frame, designIndex), 0));
+    
     return vec2(tileIndex, rotIndex);
 }
 `;
@@ -65,13 +79,42 @@ const tileUVs = `
     #endif
 `;
 
+const data = new Uint8Array([
+    16, 17, 18, 19,
+    16, 17, 18, 19,
+]);
+const dataTex = new THREE.DataTexture(data, 4, 2, THREE.RedIntegerFormat, THREE.UnsignedByteType);
+dataTex.internalFormat = 'R8UI';
+dataTex.needsUpdate = true;
+
+// const includePattern = /^[ \t]*#include +<([\w\d./]+)>/gm;
+
+// function resolveIncludes(string) {
+// 	return string.replace(includePattern, includeReplacer);
+// }
+
+// function includeReplacer(match, include) {
+// 	const string = THREE.ShaderChunk[include];
+// 	if ( string === undefined ) {
+// 		throw new Error('Can not resolve #include <' + include + '>');
+// 	}
+// 	return resolveIncludes(string);
+// }
+
+// console.log(resolveIncludes(`
+// #include <project_vertex>
+// `));
+
 /** 
  * @param {THREE.Shader} shader
  */
 function blockShapeShaderFixer(shader) {
+    blockUniforms = shader.uniforms;
+    shader.uniforms.frame = { value: 1 };
     shader.uniforms.tileScale = { value: 1/16 };
     shader.uniforms.S4Lookup = { value: S4Lookup };
     shader.uniforms.D2Lookup = { value: D2Lookup };
+    shader.uniforms.dataTex = { value: dataTex };
 
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
 ` + blockTileDefines);
@@ -87,7 +130,10 @@ float offset = dot(norm, vec3(0.0, 0.0, 1.0));
 mvPosition.xyz -= normal * clamp(offset, 0.0, 1.0) * 0.001;
 
 gl_Position = combined * mvPosition;
-if (tile.x == 0.0) gl_Position = vec4(0.0);
+
+#ifdef USE_UV
+    if (tile.x == 0.0) gl_Position = vec4(0.0);
+#endif
         `.trim(),
     );
 };
@@ -147,12 +193,15 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         this.faceTiles1 = makeVec4InstancedBufferAttribute(count);
         this.faceOrients0 = makeVec4InstancedBufferAttribute(count);
         this.faceOrients1 = makeVec4InstancedBufferAttribute(count);
+        this.design = new THREE.InstancedBufferAttribute(new Int32Array(count), 1)
+        .setUsage(THREE.DynamicDrawUsage);
 
         this.geometry.setAttribute("instanceOrientation", this.orientation);
         this.geometry.setAttribute("faceTiles0", this.faceTiles0);
         this.geometry.setAttribute("faceTiles1", this.faceTiles1);
         this.geometry.setAttribute("faceOrients0", this.faceOrients0);
         this.geometry.setAttribute("faceOrients1", this.faceOrients1);
+        this.geometry.setAttribute("design", this.design);
     }
 
     static _sphere = new THREE.Sphere();
@@ -221,7 +270,8 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         const _orientation = BlockShapeInstances._orientation;
 
         _orientation.fromBufferAttribute(this.orientation, index);
-        target.copy(S4Lookup[_orientation.w]);
+        target.identity();
+        target.setFromMatrix3(S4Lookup[_orientation.w]);
         target.setPosition(_orientation.x, _orientation.y, _orientation.z);
 
         return target;
@@ -247,8 +297,16 @@ class BlockShapeInstances extends THREE.InstancedMesh {
      * @param {number} index
      * @param {number} rotation
      */
-     setRotationAt(index, rotation) {
+    setRotationAt(index, rotation) {
         this.orientation.setW(index, rotation);
+    }
+
+    /**
+     * @param {number} index
+     * @param {number} design
+     */
+    setDesignAt(index, design) {
+        this.design.setX(index, design);
     }
 
     /**
@@ -336,6 +394,7 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         this.faceOrients1.needsUpdate = true;
         this.faceTiles0.needsUpdate = true;
         this.faceTiles1.needsUpdate = true;
+        this.design.needsUpdate = true;
     }
 
     /**

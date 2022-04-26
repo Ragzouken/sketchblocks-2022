@@ -1,3 +1,9 @@
+/* prevent pull down to refresh page (and lose data rip) */
+body {
+    overscroll-behavior-y: contain;
+    touch-action: none;
+}
+
 * {
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-crisp-edges;

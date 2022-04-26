@@ -123,6 +123,8 @@ function makeGeometry(data) {
     return geometry;
 }
 
+let blockUniforms;
+
 async function start() {
     const stats = Stats()
     document.body.appendChild(stats.dom)
@@ -226,10 +228,6 @@ async function start() {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
-    window.addEventListener("pointermove", (event) => {
-        pointer.set(event.clientX, event.clientY);
-    });
-
     function getNormalisePointer() {
         const norm = new THREE.Vector2();
         const rect = renderer.domElement.getBoundingClientRect();
@@ -270,6 +268,7 @@ async function start() {
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
                 renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), 0);
                 // renderer.setTilesAt(index, 0, THREE.MathUtils.randInt(0, 7));
+                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, 4));
             }
         }
     }
@@ -314,13 +313,18 @@ async function start() {
 
     const cameraQuat = new THREE.Quaternion();
     const forward = new THREE.Vector3();
-    const triangle = new THREE.Triangle();
-    const matrix = new THREE.Matrix4();
-    const vector = new THREE.Vector3();
+
+    let frame = 0;
+    let timer = 0;
+
+    const rs = Array.from(renderers.values());
 
     function animate() {
-        const rs = Array.from(renderers.values());
+        if (blockUniforms) blockUniforms.frame.value = frame;
+        if (timer == 0) frame = (frame + 1) % 4;
 
+        timer = (timer + 1) % 20;
+        
         // for (let i = 0; i < 4; ++i) {
         //     for (const renderer of rs) {
         //         renderer.setTileAt(
@@ -471,7 +475,7 @@ async function start() {
 
         requestAnimationFrame(animate);
 
-        stats.update()
+        stats.update();  
     };
 
     animate();
@@ -482,13 +486,19 @@ async function start() {
     }
     update();
 
+    window.addEventListener("pointermove", (event) => {
+        pointer.set(event.clientX, event.clientY);
+    });
+
     window.addEventListener("pointerdown", (event) => {
+        pointer.set(event.clientX, event.clientY);
         held["Mouse"] = true;
         pressed["Mouse"] = true;
         event.preventDefault();
     });
 
-    window.addEventListener("pointerdown", (event) => {
+    window.addEventListener("pointerup", (event) => {
+        pointer.set(event.clientX, event.clientY);
         held["Mouse"] = false;
     });
 

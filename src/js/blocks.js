@@ -7,13 +7,18 @@ const orthoNormals = [
     new THREE.Vector3(-1,  0,  0),
 ];
 
+/** @type {THREE.Matrix3[]} */
 const S4Lookup = [];
 
 for (const up of orthoNormals) {
     for (const forward of orthoNormals) {
         if (Math.abs(up.dot(forward)) > .1) continue;
         const left = up.clone().cross(forward);
-        S4Lookup.push(new THREE.Matrix4().makeBasis(left, up, forward));
+        const matrix = new THREE.Matrix4().makeBasis(left, up, forward);
+        S4Lookup.push(new THREE.Matrix3().setFromMatrix4(matrix));
+
+        // const q = new THREE.Quaternion().setFromRotationMatrix(matrix);
+        // console.log(...Array.from(q).map((c) => c.toFixed(2)));
     }
 }
 
