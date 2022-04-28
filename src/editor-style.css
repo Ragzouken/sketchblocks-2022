@@ -32,6 +32,8 @@ html, body {
 
     display: flex;
     flex-direction: row;
+
+    background: black;
 }
 
 #debug {

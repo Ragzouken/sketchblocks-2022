@@ -78,6 +78,7 @@ function makeGeometry(data) {
     const texcoords = [];
     const normals = [];
     const indexes = [];
+    const faces = [];
 
     let nextIndex = 0;
 
@@ -103,19 +104,21 @@ function makeGeometry(data) {
         {
             positions.push(...face.positions[i]);
             texcoords.push(...face.texturing[i]);
-            texcoords.push(faceIndex); // third test coord
+            faces.push(faceIndex);
             normals.push(normal.x, normal.y, normal.z);
         }
     });
 
     const p = new THREE.BufferAttribute(new Float32Array(positions), 3);
-    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 3);
+    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 2);
     const n = new THREE.BufferAttribute(new Float32Array(normals), 3);
+    const f = new THREE.BufferAttribute(new Float32Array(faces), 1);
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", p);
     geometry.setAttribute("normal", n);
-    geometry.setAttribute("uvSpecial", t);
+    geometry.setAttribute("uv", t);
+    geometry.setAttribute("face", f);
     geometry.setIndex(indexes);
 
     geometry.translate(-.5, -.5, -.5);
@@ -164,6 +167,7 @@ async function start() {
     const tilesTex = await loader.loadAsync("tiles.png");
     tilesTex.magFilter = THREE.NearestFilter;
     tilesTex.minFilter = THREE.NearestFilter;
+    tilesTex.generateMipmaps = false;
 
     const geometries = {
         ramp: makeGeometry(ramp),
@@ -180,7 +184,9 @@ async function start() {
     for (let i = 0; i < blockDesignData.count; ++i) {
         blockDesignData.setDesignAt(i, randomDesign());
     }
-    blockDesignData.setDesignAt(0, randomDesign(4));
+    blockDesignData.setDesignAt(0, repeatDesign([30, 0, 30, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0]));
+    blockDesignData.setDesignAt(1, [20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1]);
+    blockDesignData.setDesignAt(2, randomDesign(4, 0));
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
@@ -255,7 +261,7 @@ async function start() {
         renderer.setRotationAt(index, rotation);
     });
 
-    const cubeSize = 32;
+    const cubeSize = 16;
 
     const types = Array.from(renderers.keys());
     for (let z = 0; z < cubeSize; ++z) {
@@ -269,14 +275,10 @@ async function start() {
                 const index = renderer.count++;
                 renderer.setPositionAt(index, new THREE.Vector3(x-8, -2-z, y-8));
                 renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
-                // renderer.setTilesAt(index, THREE.MathUtils.randInt(0, 255), 0);
-                // renderer.setTilesAt(index, 0, THREE.MathUtils.randInt(0, 7));
-                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, blockDesignData.count));
+                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, 2));
             }
         }
     }
-
-    console.log(Math.max(...Array.from(renderers.values()).map((r) => r.count)));
     
     /** @type {THREE.Object3D[]} */
     const billbs = [];
@@ -375,22 +377,26 @@ async function start() {
                 mesh.getPositionAt(first.instanceId, selectCubeMes.position);
 
                 if (pressed["Mouse"]) {
-                    const designIndex = mesh.getDesignAt(first.instanceId);
-                    const design = [];
-                    blockDesignData.getDesignAt(designIndex, design);
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[0][prev];
+                    mesh.setRotationAt(first.instanceId, next);
 
-                    const index = frame * 16 + face * 2;
-                    let [tile, rotation] = [design[index + 0], design[index + 1]];
-                    rotation = (rotation + 1) % 4;
-                    // tile = 2
-                    design[index + 1] = rotation;
+                    // const designIndex = mesh.getDesignAt(first.instanceId);
+                    // const design = [];
+                    // blockDesignData.getDesignAt(designIndex, design);
 
-                    for (let i = 0; i < 4; ++i) {
-                        design[i * 16 + face * 2 + 1] = rotation;
-                    }
+                    // const index = frame * 16 + face * 2;
+                    // let [tile, rotation] = [design[index + 0], design[index + 1]];
+                    // rotation = (rotation + 1) % 4;
+                    // tile = (Math.floor(tile / 4)*4 + 4) % 256;
 
-                    blockDesignData.setDesignAt(designIndex, design);
-                    blockDesignData.update();
+                    // for (let i = 0; i < 4; ++i) {
+                    //     design[i * 16 + face * 2 + 0] = tile+i;
+                    //     // design[i * 16 + face * 2 + 1] = rotation;
+                    // }
+
+                    // blockDesignData.setDesignAt(designIndex, design);
+                    // blockDesignData.update();
                 }
             }
         }

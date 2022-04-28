@@ -8,6 +8,11 @@ vec2 mapTile(vec2 uv, int tile, int orientation) {
     int yi = D2Lookup[orientation * 2 + 1];
     uv = vec2(components[xi], components[yi]);
     
+    // half pixel correction
+    vec2 c = vec2(1.0 / 256.0);
+    uv += c * .5;
+    uv -= c * uv;
+
     float t = float(tile);
     uv += vec2(mod(t, 16.0), floor(t / 16.0));
     uv *= tileScale;
@@ -34,14 +39,14 @@ const blockTileDefines = tileDefines + cubeDefines + `
 precision highp usampler2D;
 
 attribute vec4 instanceOrientation;
-attribute vec3 uvSpecial;
+attribute float face;
 attribute int design;
 
 uniform usampler2D blockDesigns;
 uniform int frame;
 
 vec2 getTileData() {
-    int faceIndex = int(uvSpecial.z);
+    int faceIndex = int(face);
     uint tileIndex = texelFetch(blockDesigns, ivec2(frame*16 + faceIndex*2 + 0, design), 0).r;
     uint rotIndex = texelFetch(blockDesigns, ivec2(frame*16 + faceIndex*2 + 1, design), 0).r;
     
@@ -62,7 +67,7 @@ vec2 getTileData() {
 const tileUVs = `
     #ifdef USE_UV
         vec2 tile = getTileData();
-        vUv = mapTile(uvSpecial.xy, int(tile.x), int(tile.y));
+        vUv = mapTile(uv, int(tile.x), int(tile.y));
     #endif
 `;
 
@@ -80,6 +85,10 @@ function randomDesign(tile = undefined, rot = undefined) {
     return design;
 }
 
+function repeatDesign(design) {
+    return [...design, ...design, ...design, ...design];
+}
+
 /** 
  * @param {THREE.Shader} shader
  */
@@ -87,7 +96,7 @@ function blockShapeShaderFixer(shader) {
     shader.uniforms.frame = { value: 1 };
     shader.uniforms.tileScale = { value: 1/16 };
     shader.uniforms.S4Lookup = { value: S4Lookup };
-    shader.uniforms.D2Lookup = { value: D2Lookup };
+    shader.uniforms.D2Lookup = { value: D4Lookup };
     shader.uniforms.blockDesigns = { value: undefined };
 
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
@@ -118,7 +127,7 @@ gl_Position = combined * mvPosition;
  function billboardShaderFixer(shader) {
     this.uniforms = shader.uniforms;
     shader.uniforms.tileScale = { value: 1/16 };
-    shader.uniforms.D2Lookup = { value: D2Lookup };
+    shader.uniforms.D2Lookup = { value: D4Lookup };
 
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
 ` + quadTileDefines);
@@ -232,8 +241,8 @@ class BlockShapeInstances extends THREE.InstancedMesh {
      * @returns {number}
      */
     getFaceIndex(triangle) {
-        const uvs = this.geometry.getAttribute("uvSpecial");
-        const face = uvs.getZ(this.geometry.index.array[triangle * 3]);
+        const faces = this.geometry.getAttribute("face");
+        const face = faces.getX(this.geometry.index.array[triangle * 3]);
         return face;
     }
 
@@ -307,6 +316,14 @@ class BlockShapeInstances extends THREE.InstancedMesh {
      */
     setPositionAt(index, position) {
         this.orientation.setXYZ(index, position.x, position.y, position.z);
+    }
+
+    /**
+     * @param {number} index
+     * @returns {number}
+     */
+     getRotationAt(index) {
+        return this.orientation.getW(index);
     }
 
     /**

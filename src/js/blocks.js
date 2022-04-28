@@ -10,6 +10,9 @@ const orthoNormals = [
 /** @type {THREE.Matrix3[]} */
 const S4Lookup = [];
 
+/** @type {THREE.Quaternion[]} */
+const S4Quats = [];
+
 for (const up of orthoNormals) {
     for (const forward of orthoNormals) {
         if (Math.abs(up.dot(forward)) > .1) continue;
@@ -17,13 +20,34 @@ for (const up of orthoNormals) {
         const matrix = new THREE.Matrix4().makeBasis(left, up, forward);
         S4Lookup.push(new THREE.Matrix3().setFromMatrix4(matrix));
 
-        // const q = new THREE.Quaternion().setFromRotationMatrix(matrix);
-        // console.log(...Array.from(q).map((c) => c.toFixed(2)));
+        const q = new THREE.Quaternion().setFromRotationMatrix(matrix).normalize();
+        S4Quats.push(q);
     }
 }
 
-// dihedral group 2 i.e rotation+flip of rect
-const D2Lookup = [
+/**
+ * @param {THREE.Quaternion} quaternion
+ */
+function quaternionToS4(quaternion) {
+    return S4Quats.findIndex((o) => Math.abs(o.dot(quaternion)) >= 0.99);
+}
+
+const S4Ops = [];
+
+orthoNormals.forEach((axis) => {
+    const rotation = new THREE.Quaternion().setFromAxisAngle(axis, Math.PI/2).normalize();
+    const rotationLookup = [];
+    S4Ops.push(rotationLookup);
+
+    S4Quats.forEach((prevOrientation) => {
+        const nextOrientation = rotation.clone().multiply(prevOrientation).normalize();
+        const nextOrientationIndex = quaternionToS4(nextOrientation);
+        rotationLookup.push(nextOrientationIndex);
+    });
+});
+
+// dihedral group 4 i.e rotation+flip of rect
+const D4Lookup = [
     0, 1,    3, 0,    2, 3,     1, 2, 
     2, 1,    1, 0,    0, 3,     3, 2,
 ];
@@ -33,44 +57,44 @@ const cube = {
 
     faces: [
         {
-            name: "front",
-            positions: [[0, 1, 1], [0, 0, 1], [1, 0, 1], [1, 1, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "left",
-            positions: [[1, 1, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "right",
-            positions: [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
             name: "top",
             positions: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            texturing: [   [1, 1],    [0, 1],    [0, 0],    [1, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "bottom",
             positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "front",
+            positions: [[0, 1, 1], [0, 0, 1], [1, 0, 1], [1, 1, 1]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "back",
+            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+            texturing: [   [0, 0],    [1, 0],    [1, 1],    [0, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "left",
+            positions: [[1, 1, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "right",
+            positions: [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
     ],
@@ -85,21 +109,21 @@ const ramp =
         {
             name: "slope",
             positions: [[0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 0]],
-            texturing: [   [1, 1],    [1, 0],    [0, 0],    [0, 1]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "bottom",
             positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "back",
+            positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+            texturing: [   [0, 0],    [1, 0],    [1, 1],    [0, 1]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
@@ -125,44 +149,44 @@ const slab =
 
     faces: [
         {
-            name: "front",
-            positions: [[0, .5, 1], [0, 0, 1], [1, 0, 1], [1, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, .5],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "left",
-            positions: [[1, .5, 1], [1, 0, 1], [1, 0, 0], [1, .5, 0]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "right",
-            positions: [[0, .5, 0], [0, 0, 0], [0, 0, 1], [0, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
             name: "top",
             positions: [[0, .5, 1], [1, .5, 1], [1, .5, 0], [0, .5, 0]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            texturing: [   [1, 1],    [0, 1],    [0, 0],    [1, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "bottom",
             positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, 1]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "front",
+            positions: [[0, .5, 1], [0, 0, 1], [1, 0, 1], [1, .5, 1]],
+            texturing: [   [0, .5],    [0, 0],    [1, 0],    [1, .5]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "back",
+            positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
+            texturing: [   [0, 0],    [1, 0],    [1, .5],    [0, .5]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "left",
+            positions: [[1, .5, 1], [1, 0, 1], [1, 0, 0], [1, .5, 0]],
+            texturing: [   [0, .5],    [0, 0],    [1, 0],    [1, .5]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
+            name: "right",
+            positions: [[0, .5, 0], [0, 0, 0], [0, 0, 1], [0, .5, 1]],
+            texturing: [   [0, .5],    [0, 0],    [1, 0],    [1, .5]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
     ],
@@ -182,16 +206,16 @@ const wedgeHead =
         },
 
         {
-            name: "back",
-            positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, .5],    [0, .5]],
+            name: "bottom",
+            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
+            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
-            name: "bottom",
-            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            name: "back",
+            positions: [[1, 0, 0], [0, 0, 0], [0, .5, 0], [1, .5, 0]],
+            texturing: [   [0, 0],    [1, 0],    [1, .5],    [0, .5]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
@@ -224,16 +248,23 @@ const wedgeBody =
         },
 
         {
+            name: "bottom",
+            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
+            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
+            triangles: [[0, 1, 2], [0, 2, 3]]
+        },
+
+        {
             name: "front",
             positions: [[0, .5, 1], [0, 0, 1], [1, 0, 1], [1, .5, 1]],
-            texturing: [   [1, .5],    [1, 1],    [0, 1],    [0, .5]],
+            texturing: [   [0, .5],    [0, 0],    [1, 0],    [1, .5]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
         {
             name: "back",
             positions: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-            texturing: [   [0, 1],    [1, 1],    [1, 0],    [0, 0]],
+            texturing: [   [0, 0],    [1, 0],    [1, 1],    [0, 1]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
 
@@ -248,13 +279,6 @@ const wedgeBody =
             name: "right",
             positions: [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, .5, 1]],
             texturing: [   [0, 1],    [0, 0],    [1, 0],    [1, .5]],
-            triangles: [[0, 1, 2], [0, 2, 3]]
-        },
-
-        {
-            name: "bottom",
-            positions: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]],
-            texturing: [   [1, 0],    [1, 1],    [0, 1],    [0, 0]],
             triangles: [[0, 1, 2], [0, 2, 3]]
         },
     ],
