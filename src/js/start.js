@@ -376,10 +376,47 @@ async function start() {
 
                 mesh.getPositionAt(first.instanceId, selectCubeMes.position);
 
-                if (pressed["Mouse"]) {
+                if (pressed["A"]) {
                     const prev = mesh.getRotationAt(first.instanceId);
                     const next = S4Ops[0][prev];
-                    mesh.setRotationAt(first.instanceId, next);
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["D"]) {
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[2][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["Q"]) {
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[1][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["E"]) {
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[4][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["W"]) {
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[5][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["S"]) {
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[3][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
+                }
+
+                if (pressed["Mouse"]) {
+                    
+                    const prev = mesh.getRotationAt(first.instanceId);
+                    const next = S4Ops[0][prev];
+                    mesh.setRotationAt(first.instanceId, next); 
 
                     // const designIndex = mesh.getDesignAt(first.instanceId);
                     // const design = [];
