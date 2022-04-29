@@ -7,23 +7,27 @@ const orthoNormals = [
     new THREE.Vector3(-1,  0,  0),
 ];
 
+const orthoOrients = [];
+orthoOrients.length = 6;
+
 /** @type {THREE.Matrix3[]} */
 const S4Lookup = [];
 
 /** @type {THREE.Quaternion[]} */
 const S4Quats = [];
 
-for (const up of orthoNormals) {
-    for (const forward of orthoNormals) {
-        if (Math.abs(up.dot(forward)) > .1) continue;
+orthoNormals.forEach((up, i) => {
+    orthoNormals.forEach((forward) => {
+        if (Math.abs(up.dot(forward)) > .1) return;
         const left = up.clone().cross(forward);
         const matrix = new THREE.Matrix4().makeBasis(left, up, forward);
         S4Lookup.push(new THREE.Matrix3().setFromMatrix4(matrix));
 
         const q = new THREE.Quaternion().setFromRotationMatrix(matrix).normalize();
         S4Quats.push(q);
-    }
-}
+        orthoOrients[i] = q;
+    });
+});
 
 /**
  * @param {THREE.Quaternion} quaternion

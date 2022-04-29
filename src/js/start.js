@@ -203,19 +203,22 @@ async function start() {
     const selectCubeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: tilesTex });
     const selectCubeMes = new THREE.Mesh(selectCubeGeo, selectCubeMat);
 
-    const uvs = selectCubeGeo.getAttribute("uv");
-    function remap(i, tile) {
+    const uvs1 = selectCubeGeo.getAttribute("uv");
+    function remap(uvs, i, tile) {
+        const col = tile % 16;
+        const row = (tile / 16) | 0;
         let [x, y] = [uvs.getX(i), uvs.getY(i)]; 
-        x = (x + tile) / 16;
-        y = (y + 0) / 16;
+        x = (x + col) / 16;
+        y = (y + row) / 16;
         uvs.setXY(i, x, y);
     }
-    for (let i = 4; i < uvs.count; ++i) remap(i, 7);
-    for (let i = 0; i < 4; ++i) remap(i, 2);
+    for (let i = 0; i < 8; ++i) remap(uvs1, i, 7);
+    for (let i = 12; i < uvs1.count; ++i) remap(uvs1, i, 7);
+    for (let i = 8; i < 12; ++i) remap(uvs1, i, 2);
     selectCubeMes.position.set(0, 0, 1);
     selectCubeMes.scale.multiplyScalar(1.01);
     scene.add(selectCubeMes);
-    selectCubeMes.visible = false;
+    //selectCubeMes.visible = false;
 
     const spriteMaterial = blockMaterial.clone();
 
@@ -252,16 +255,14 @@ async function start() {
         return norm;
     }
 
+    const blockMap = new BlockMap(renderers);
+
     leveldata.blocks.forEach((block, i) => {
         const [type, position, rotation = 0, tiles=[]] = block;
-        const renderer = renderers.get(type);
-
-        const index = renderer.count++;
-        renderer.setPositionAt(index, new THREE.Vector3(...position));
-        renderer.setRotationAt(index, rotation);
+        blockMap.setBlockAt(new THREE.Vector3(...position), type, rotation);
     });
 
-    const cubeSize = 16;
+    const cubeSize = 9;
 
     const types = Array.from(renderers.keys());
     for (let z = 0; z < cubeSize; ++z) {
@@ -269,13 +270,12 @@ async function start() {
             for (let x = 0; x < cubeSize; ++x) {
                 if (Math.random() < .5) continue;
 
-                const type = types[THREE.MathUtils.randInt(0, types.length - 1)];
-                const renderer = renderers.get(type);
-
-                const index = renderer.count++;
-                renderer.setPositionAt(index, new THREE.Vector3(x-8, -2-z, y-8));
-                renderer.setRotationAt(index, THREE.MathUtils.randInt(0, 7));
-                renderer.setDesignAt(index, THREE.MathUtils.randInt(0, 2));
+                blockMap.setBlockAt(
+                    new THREE.Vector3(x-4, -2-z, y-4), 
+                    types[THREE.MathUtils.randInt(0, types.length - 1)],
+                    THREE.MathUtils.randInt(0, 7),
+                    THREE.MathUtils.randInt(0, 2),
+                );
             }
         }
     }
@@ -322,6 +322,12 @@ async function start() {
     let frame = 0;
     let timer = 0;
 
+    let hoveredBlock = {
+        mesh: /** @type {BlockShapeInstances} */ (undefined),
+        normal: new THREE.Vector3(),
+        instanceId: 0,
+    };
+
     const rs = Array.from(renderers.values());
 
     function animate() {
@@ -356,10 +362,21 @@ async function start() {
 
         const norm = getNormalisePointer();
         raycaster.setFromCamera(norm, camera);
-        const [first] = raycaster.intersectObject(level, true);
+        const [first] = raycaster.intersectObjects([level, selectCubeMes], true);
 
         if (first) {
-            if (first.object === billboards) {
+            if (first.object === selectCubeMes) {
+                const normalMatrix = new THREE.Matrix3().getNormalMatrix(first.object.matrixWorld);
+                hoveredBlock.normal.fromBufferAttribute(selectCubeMes.geometry.getAttribute("normal"), first.face.a);
+                hoveredBlock.normal.applyNormalMatrix(normalMatrix);
+
+                // pushVector(pointsVerts, first.point);
+                // pushVector(pointsVerts, first.point.clone().add(normal));
+
+                const orthoIndex = orthoNormals.findIndex((o) => o.distanceToSquared(hoveredBlock.normal) < 0.1);
+                const quat = orthoOrients[orthoIndex];
+                selectCubeMes.rotation.setFromQuaternion(quat);
+            } else if (first.object === billboards) {
                 const mesh = /** @type {BillboardInstances} */ (first.object);
                 mesh.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
@@ -374,46 +391,10 @@ async function start() {
 
                 debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (click to rotate face)`;
 
-                mesh.getPositionAt(first.instanceId, selectCubeMes.position);
-
-                if (pressed["A"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[0][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
-
-                if (pressed["D"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[2][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
-
-                if (pressed["Q"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[1][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
-
-                if (pressed["E"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[4][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
-
-                if (pressed["W"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[5][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
-
-                if (pressed["S"]) {
-                    const prev = mesh.getRotationAt(first.instanceId);
-                    const next = S4Ops[3][prev];
-                    mesh.setRotationAt(first.instanceId, next); 
-                }
+                hoveredBlock.mesh = mesh;
+                hoveredBlock.instanceId = first.instanceId;
 
                 if (pressed["Mouse"]) {
-                    
                     const prev = mesh.getRotationAt(first.instanceId);
                     const next = S4Ops[0][prev];
                     mesh.setRotationAt(first.instanceId, next); 
@@ -435,6 +416,60 @@ async function start() {
                     // blockDesignData.setDesignAt(designIndex, design);
                     // blockDesignData.update();
                 }
+            }
+        } else {
+            hoveredBlock.mesh = undefined;
+        }
+
+        selectCubeMes.visible = hoveredBlock.mesh !== undefined;
+        selectCubeMes.scale.set(1.01, 1.01, 1.01).multiplyScalar(hoveredBlock.mesh ? 1 : 0);
+
+        if (hoveredBlock.mesh) {
+            const { mesh, instanceId, normal } = hoveredBlock;
+
+            mesh.getPositionAt(instanceId, selectCubeMes.position);
+
+            if (pressed["Mouse"]) {
+                const base = new THREE.Vector3();
+                mesh.getPositionAt(instanceId, base);
+                const pos = base.clone().add(normal).round();
+                blockMap.setBlockAt(pos, "cube");
+            }
+
+            if (pressed["A"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[0][prev];
+                mesh.setRotationAt(instanceId, next); 
+            }
+
+            if (pressed["D"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[2][prev];
+                mesh.setRotationAt(instanceId, next); 
+            }
+
+            if (pressed["Q"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[1][prev];
+                mesh.setRotationAt(instanceId, next); 
+            }
+
+            if (pressed["E"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[4][prev];
+                mesh.setRotationAt(instanceId, next); 
+            }
+
+            if (pressed["W"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[5][prev];
+                mesh.setRotationAt(instanceId, next); 
+            }
+
+            if (pressed["S"]) {
+                const prev = mesh.getRotationAt(instanceId);
+                const next = S4Ops[3][prev];
+                mesh.setRotationAt(instanceId, next); 
             }
         }
 
@@ -568,4 +603,67 @@ async function start() {
     window.addEventListener("keyup", (event) => {
         held[event.key] = false;
     });
+}
+
+class BlockMap {
+    /** @type {Map<string, { type: string, index: number }>} */
+    blocks = new Map();
+    /** @type {Map<string, BlockShapeInstances>} */
+    meshes = new Map();
+
+    /**
+     * @param {Map<string, BlockShapeInstances>} renderers
+     */
+    constructor(renderers) {
+        renderers.forEach((mesh, type) => this.meshes.set(type, mesh));
+    }
+
+    /**
+     * @param {THREE.Vector3} position
+     * @param {string} type 
+     */
+    setBlockAt(position, type, rotation=0, design=0) {
+        this.delBlockAt(position);
+
+        const mesh = this.meshes.get(type);
+        const index = mesh.count++;
+        mesh.setPositionAt(index, position);
+        mesh.setRotationAt(index, rotation);
+        mesh.setDesignAt(index, design);
+        mesh.update();
+
+        this.blocks.set(BlockMap.vec2key(position), { type, index });
+    }
+
+    getBlockAt(position) {
+        return this.blocks.get(BlockMap.vec2key(position));
+    }
+
+    delBlockAt(position) {
+        const block = this.getBlockAt(position);
+        if (!block) return;
+
+        const mesh = this.meshes.get(block.type);
+        if (block.index < mesh.count - 1) {
+            const lastPos = new THREE.Vector3();
+            mesh.getPositionAt(mesh.count - 1, lastPos);
+            const lastBlock = this.getBlockAt(lastPos);
+
+            mesh.setPositionAt(block.index, lastPos);
+            mesh.setRotationAt(block.index, mesh.getRotationAt(lastBlock.index));
+            mesh.setDesignAt(block.index, mesh.getDesignAt(lastBlock.index));
+            lastBlock.index = block.index;
+        }
+
+        this.blocks.delete(BlockMap.vec2key(position));
+        mesh.count -= 1;
+    }
+
+    static vec2key(vector) {
+        return this.xyz2key(vector.x, vector.y, vector.z);
+    }
+
+    static xyz2key(x, y, z) {
+        return `${x|0},${y|0},${z|0}`;
+    }
 }
