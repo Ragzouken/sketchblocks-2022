@@ -184,7 +184,7 @@ async function start() {
     for (let i = 0; i < blockDesignData.count; ++i) {
         blockDesignData.setDesignAt(i, randomDesign());
     }
-    blockDesignData.setDesignAt(0, repeatDesign([30, 0, 30, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0]));
+    blockDesignData.setDesignAt(0, repeatDesign([31, 0, 31, 0, 13, 0, 13, 0, 13, 0, 13, 0, 13, 0, 13, 0]));
     blockDesignData.setDesignAt(1, [20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1]);
     blockDesignData.setDesignAt(2, randomDesign(4, 0));
 
@@ -262,16 +262,14 @@ async function start() {
         blockMap.setBlockAt(new THREE.Vector3(...position), type, rotation);
     });
 
-    const cubeSize = 9;
-
     const types = Array.from(renderers.keys());
-    for (let z = 0; z < cubeSize; ++z) {
-        for (let y = 0; y < cubeSize; ++y) {
-            for (let x = 0; x < cubeSize; ++x) {
+    for (let z = 0; z < 16; ++z) {
+        for (let y = 0; y < 5; ++y) {
+            for (let x = 0; x < 5; ++x) {
                 if (Math.random() < .5) continue;
 
                 blockMap.setBlockAt(
-                    new THREE.Vector3(x-4, -2-z, y-4), 
+                    new THREE.Vector3(x-2, -2-z, y-2), 
                     types[THREE.MathUtils.randInt(0, types.length - 1)],
                     THREE.MathUtils.randInt(0, 7),
                     THREE.MathUtils.randInt(0, 2),
@@ -349,13 +347,13 @@ async function start() {
         rs.forEach((r) => r.update());
         billboards.update();
 
-        const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < .8);
+        const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < 1.2);
 
         if (nearby && dialogue.hidden) {
             billboards.setPositionAt(promptIndex, new THREE.Vector3().copy(nearby.position).add(new THREE.Vector3(0, 1, 0)));
             billboards.setTileAt(promptIndex, speakTile);
         } else {
-            billboards.setPositionAt(promptIndex, new THREE.Vector3(0, 1, 0));
+            billboards.setTileAt(promptIndex, 0);
         }
 
         renderer.render(scene, camera);
@@ -429,11 +427,18 @@ async function start() {
 
             mesh.getPositionAt(instanceId, selectCubeMes.position);
 
-            if (pressed["Mouse"]) {
+            if (pressed["MouseLeft"]) {
                 const base = new THREE.Vector3();
                 mesh.getPositionAt(instanceId, base);
                 const pos = base.clone().add(normal).round();
                 blockMap.setBlockAt(pos, "cube");
+            }
+
+            if (pressed["MouseRight"]) {
+                const base = new THREE.Vector3();
+                mesh.getPositionAt(instanceId, base);
+                blockMap.delBlockAt(base);
+                hoveredBlock.mesh = undefined;
             }
 
             if (pressed["A"]) {
@@ -587,12 +592,21 @@ async function start() {
         pointer.set(event.clientX, event.clientY);
         held["Mouse"] = true;
         pressed["Mouse"] = true;
-        event.preventDefault();
     });
 
     window.addEventListener("pointerup", (event) => {
         pointer.set(event.clientX, event.clientY);
         held["Mouse"] = false;
+    });
+
+    window.addEventListener("mousedown", (event) => {
+        if (event.button === 0) pressed["MouseLeft"] = true;
+        if (event.button === 2) pressed["MouseRight"] = true;
+        event.preventDefault();
+    })
+
+    window.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
     });
 
     window.addEventListener("keydown", (event) => {
