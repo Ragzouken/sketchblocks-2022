@@ -237,6 +237,30 @@ class BlockShapeInstances extends THREE.InstancedMesh {
     static _intersects = [];
 
     /**
+     * @param {number} index
+     */
+    delAllAt(index) {
+        const isLast = index === this.count - 1;
+
+        // if this isn't the last element, swap it with the last element
+        if (!isLast) {
+            const prev = this.count - 1;
+            const next = index;
+
+            this.getOrientationAt(prev, BlockShapeInstances._orientation);
+            this.setOrientationAt(next, BlockShapeInstances._orientation);
+            this.setDesignAt(next, this.getDesignAt(prev));
+
+            // contents of prev now live at next
+        }
+
+        // discard the last element
+        this.count -= 1;
+
+        return !isLast;
+    }
+
+    /**
      * @param {number} triangle
      * @returns {number}
      */
@@ -298,8 +322,22 @@ class BlockShapeInstances extends THREE.InstancedMesh {
         target.identity();
         target.setFromMatrix3(S4Lookup[_orientation.w]);
         target.setPosition(_orientation.x, _orientation.y, _orientation.z);
+    }
 
-        return target;
+    /**
+     * @param {number} index
+     * @param {THREE.Vector4} target
+     */
+    getOrientationAt(index, target) {
+        target.fromBufferAttribute(this.orientation, index);
+    }
+
+    /**
+     * @param {number} index
+     * @param {THREE.Vector4} orientation
+     */
+     setOrientationAt(index, orientation) {
+        this.orientation.setXYZW(index, orientation.x, orientation.y, orientation.z, orientation.w);
     }
 
     /**
@@ -385,6 +423,7 @@ class BlockShapeInstances extends THREE.InstancedMesh {
 
     /**
      * @param {THREE.Box3} bounds
+     * @param {PhysicsTriangle[]} target
      */
     getTrianglesInBounds(bounds, target) {
         const offset = new THREE.Vector3(.5, .5, .5);

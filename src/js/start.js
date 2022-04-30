@@ -48,11 +48,11 @@ const leveldata = {
         ["slab", [ 0,  0,  1], 0],
         ["slab", [ 1,  0,  1], 0],
 
-        ["wedgeH", [-2, 1, 0], 20],
-        ["wedgeB", [-2, 0, 0], 20],
+        ["wedgeHead", [-2, 1, 0], 20],
+        ["wedgeBody", [-2, 0, 0], 20],
 
-        ["wedgeH", [-2, 3, 0], 12],
-        ["wedgeB", [-3, 4, 0], 12],
+        ["wedgeHead", [-2, 3, 0], 12],
+        ["wedgeBody", [-3, 4, 0], 12],
 
         ["cube", [-1,  1,  0]],
         ["ramp", [ 0,  1,  0], 1],
@@ -63,8 +63,8 @@ const leveldata = {
 
         ["slab", [ 0,  3, -1], 0],
 
-        ["wedgeH", [3, 0, 1], 0, [13, 12, 12, 12.4, 12, 12]],
-        ["wedgeB", [3, 0, 0], 0, [13, 12, 12, 12.4, 12, 12]],
+        ["wedgeHead", [3, 0, 1], 0],
+        ["wedgeBody", [3, 0, 0], 0],
     ],
 
     sprites: [
@@ -173,8 +173,8 @@ async function start() {
         ramp: makeGeometry(ramp),
         slab: makeGeometry(slab),
         cube: makeGeometry(cube),
-        wedgeH: makeGeometry(wedgeHead),
-        wedgeB: makeGeometry(wedgeBody),
+        wedgeHead: makeGeometry(wedgeHead),
+        wedgeBody: makeGeometry(wedgeBody),
     };
 
     const kinematic = new KinematicGuy();
@@ -199,36 +199,40 @@ async function start() {
         shader.uniforms.blockDesigns.value = blockDesignData;
     }
 
-    const selectCubeGeo = new THREE.BoxGeometry();
-    const selectCubeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: tilesTex });
-    const selectCubeMes = new THREE.Mesh(selectCubeGeo, selectCubeMat);
+    function makeSelectionCube() {
+        const selectCubeGeo = new THREE.BoxGeometry();
+        const selectCubeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, alphaTest: .5, map: tilesTex });
+        const selectCubeMes = new THREE.Mesh(selectCubeGeo, selectCubeMat);
+    
+        const uvs1 = selectCubeGeo.getAttribute("uv");
+        function remap(uvs, i, tile) {
+            const col = tile % 16;
+            const row = (tile / 16) | 0;
+            let [x, y] = [uvs.getX(i), uvs.getY(i)]; 
+            x = (x + col) / 16;
+            y = (y + row) / 16;
+            uvs.setXY(i, x, y);
+        }
+        for (let i = 0; i < 8; ++i) remap(uvs1, i, 7);
+        for (let i = 12; i < uvs1.count; ++i) remap(uvs1, i, 7);
+        for (let i = 8; i < 12; ++i) remap(uvs1, i, 2);
+        selectCubeMes.position.set(0, 0, 1);
+        selectCubeMes.scale.multiplyScalar(1.01);
 
-    const uvs1 = selectCubeGeo.getAttribute("uv");
-    function remap(uvs, i, tile) {
-        const col = tile % 16;
-        const row = (tile / 16) | 0;
-        let [x, y] = [uvs.getX(i), uvs.getY(i)]; 
-        x = (x + col) / 16;
-        y = (y + row) / 16;
-        uvs.setXY(i, x, y);
+        return selectCubeMes;
     }
-    for (let i = 0; i < 8; ++i) remap(uvs1, i, 7);
-    for (let i = 12; i < uvs1.count; ++i) remap(uvs1, i, 7);
-    for (let i = 8; i < 12; ++i) remap(uvs1, i, 2);
-    selectCubeMes.position.set(0, 0, 1);
-    selectCubeMes.scale.multiplyScalar(1.01);
-    scene.add(selectCubeMes);
+    const selectionCube = makeSelectionCube();
+    scene.add(selectionCube);
     //selectCubeMes.visible = false;
 
     const spriteMaterial = blockMaterial.clone();
 
     const cubeCount = 4096;
     const renderers = new Map(Object.entries(geometries).map(([key, geometry]) => [key, new BlockShapeInstances(geometry, blockMaterial, cubeCount)]));
+    const blockMap = new BlockMap(renderers);
     const billboards = new BillboardInstances(new THREE.PlaneGeometry(1, 1), spriteMaterial, cubeCount);
 
-    for (const renderer of renderers.values()) {
-        level.add(renderer);
-    }
+    level.add(blockMap);
     level.add(billboards);
 
     // points
@@ -255,28 +259,11 @@ async function start() {
         return norm;
     }
 
-    const blockMap = new BlockMap(renderers);
-
+    const types = Array.from(Object.keys(geometries));
     leveldata.blocks.forEach((block, i) => {
-        const [type, position, rotation = 0, tiles=[]] = block;
+        const [type, position, rotation = 0] = block;
         blockMap.setBlockAt(new THREE.Vector3(...position), type, rotation);
     });
-
-    const types = Array.from(renderers.keys());
-    for (let z = 0; z < 16; ++z) {
-        for (let y = 0; y < 5; ++y) {
-            for (let x = 0; x < 5; ++x) {
-                if (Math.random() < .5) continue;
-
-                blockMap.setBlockAt(
-                    new THREE.Vector3(x-2, -2-z, y-2), 
-                    types[THREE.MathUtils.randInt(0, types.length - 1)],
-                    THREE.MathUtils.randInt(0, 7),
-                    THREE.MathUtils.randInt(0, 2),
-                );
-            }
-        }
-    }
     
     /** @type {THREE.Object3D[]} */
     const billbs = [];
@@ -326,25 +313,27 @@ async function start() {
         instanceId: 0,
     };
 
-    const rs = Array.from(renderers.values());
-
     function animate() {
         if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
         if (timer == 0) frame = (frame + 1) % 4;
 
         timer = (timer + 1) % 20;
         
-        // for (let i = 0; i < 4; ++i) {
-        //     for (const renderer of rs) {
-        //         renderer.setTileAt(
-        //             THREE.MathUtils.randInt(0, renderer.count),
-        //             THREE.MathUtils.randInt(0, 7), THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7),
-        //         );
-        //         renderer.setRotationAt(THREE.MathUtils.randInt(0, renderer.count), THREE.MathUtils.randInt(0, 23));
-        //     }
-        // }
+        if (timer === 0) {
+            const position = new THREE.Vector3(
+                THREE.MathUtils.randInt(-9, 9),
+                THREE.MathUtils.randInt(-9,-1),
+                THREE.MathUtils.randInt(-9, 9),
+            );
+
+            blockMap.setBlockAt(
+                position, 
+                types[THREE.MathUtils.randInt(0, types.length - 1)],
+                THREE.MathUtils.randInt(0, 7),
+                THREE.MathUtils.randInt(0, 2),
+            );
+        }
     
-        rs.forEach((r) => r.update());
         billboards.update();
 
         const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < 1.2);
@@ -360,12 +349,12 @@ async function start() {
 
         const norm = getNormalisePointer();
         raycaster.setFromCamera(norm, camera);
-        const [first] = raycaster.intersectObjects([level, selectCubeMes], true);
+        const [first] = raycaster.intersectObjects([level, selectionCube], true);
 
         if (first) {
-            if (first.object === selectCubeMes) {
+            if (first.object === selectionCube) {
                 const normalMatrix = new THREE.Matrix3().getNormalMatrix(first.object.matrixWorld);
-                hoveredBlock.normal.fromBufferAttribute(selectCubeMes.geometry.getAttribute("normal"), first.face.a);
+                hoveredBlock.normal.fromBufferAttribute(selectionCube.geometry.getAttribute("normal"), first.face.a);
                 hoveredBlock.normal.applyNormalMatrix(normalMatrix);
 
                 // pushVector(pointsVerts, first.point);
@@ -373,7 +362,7 @@ async function start() {
 
                 const orthoIndex = orthoNormals.findIndex((o) => o.distanceToSquared(hoveredBlock.normal) < 0.1);
                 const quat = orthoOrients[orthoIndex];
-                selectCubeMes.rotation.setFromQuaternion(quat);
+                selectionCube.rotation.setFromQuaternion(quat);
             } else if (first.object === billboards) {
                 const mesh = /** @type {BillboardInstances} */ (first.object);
                 mesh.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
@@ -385,7 +374,7 @@ async function start() {
                 const mesh = /** @type {BlockShapeInstances} */ (first.object);
                 
                 const face = mesh.getFaceIndex(first.faceIndex);
-                mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
+                //mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
                 debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (click to rotate face)`;
 
@@ -419,13 +408,13 @@ async function start() {
             hoveredBlock.mesh = undefined;
         }
 
-        selectCubeMes.visible = hoveredBlock.mesh !== undefined;
-        selectCubeMes.scale.set(1.01, 1.01, 1.01).multiplyScalar(hoveredBlock.mesh ? 1 : 0);
+        selectionCube.visible = hoveredBlock.mesh !== undefined;
+        selectionCube.scale.set(1.01, 1.01, 1.01).multiplyScalar(hoveredBlock.mesh ? 1 : 0);
 
         if (hoveredBlock.mesh) {
             const { mesh, instanceId, normal } = hoveredBlock;
 
-            mesh.getPositionAt(instanceId, selectCubeMes.position);
+            mesh.getPositionAt(instanceId, selectionCube.position);
 
             if (pressed["MouseLeft"]) {
                 const base = new THREE.Vector3();
@@ -532,9 +521,7 @@ async function start() {
         bounds.max.add(kinematic.prevPosition);
 
         kinematic.scene.triangles.length = 0;
-        for (const renderer of renderers.values()) {
-            renderer.getTrianglesInBounds(bounds, kinematic.scene.triangles);
-        }
+        blockMap.getTrianglesInBounds(bounds, kinematic.scene.triangles);
 
         // hack. cause: falling too fast correctly avoid bullet hole but doesn't
         // allow you to actually touch the ground
@@ -548,7 +535,7 @@ async function start() {
         // });
         //kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
 
-        if (kinematic.nextPosition.y < -20) {
+        if (kinematic.nextPosition.y < -9) {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
             guy.position.copy(kinematic.prevPosition).y += (.5 - kinematic.capsule.radius);
@@ -619,7 +606,15 @@ async function start() {
     });
 }
 
-class BlockMap {
+function vec2key(vector) {
+    return this.xyz2key(vector.x, vector.y, vector.z);
+}
+
+function xyz2key(x, y, z) {
+    return `${x|0},${y|0},${z|0}`;
+}
+
+class BlockMap extends THREE.Object3D {
     /** @type {Map<string, { type: string, index: number }>} */
     blocks = new Map();
     /** @type {Map<string, BlockShapeInstances>} */
@@ -629,7 +624,12 @@ class BlockMap {
      * @param {Map<string, BlockShapeInstances>} renderers
      */
     constructor(renderers) {
-        renderers.forEach((mesh, type) => this.meshes.set(type, mesh));
+        super();
+
+        renderers.forEach((mesh, type) => {
+            this.meshes.set(type, mesh);
+            this.add(mesh);
+        });
     }
 
     /**
@@ -646,11 +646,11 @@ class BlockMap {
         mesh.setDesignAt(index, design);
         mesh.update();
 
-        this.blocks.set(BlockMap.vec2key(position), { type, index });
+        this.blocks.set(vec2key(position), { type, index });
     }
 
     getBlockAt(position) {
-        return this.blocks.get(BlockMap.vec2key(position));
+        return this.blocks.get(vec2key(position));
     }
 
     delBlockAt(position) {
@@ -658,26 +658,23 @@ class BlockMap {
         if (!block) return;
 
         const mesh = this.meshes.get(block.type);
-        if (block.index < mesh.count - 1) {
+        const relocated = mesh.delAllAt(block.index);
+        this.blocks.delete(vec2key(position));
+
+        // update index of relocated block
+        if (relocated) {
             const lastPos = new THREE.Vector3();
-            mesh.getPositionAt(mesh.count - 1, lastPos);
-            const lastBlock = this.getBlockAt(lastPos);
-
-            mesh.setPositionAt(block.index, lastPos);
-            mesh.setRotationAt(block.index, mesh.getRotationAt(lastBlock.index));
-            mesh.setDesignAt(block.index, mesh.getDesignAt(lastBlock.index));
-            lastBlock.index = block.index;
+            mesh.getPositionAt(block.index, lastPos);
+            this.getBlockAt(lastPos).index = block.index;
+            mesh.update();
         }
-
-        this.blocks.delete(BlockMap.vec2key(position));
-        mesh.count -= 1;
     }
 
-    static vec2key(vector) {
-        return this.xyz2key(vector.x, vector.y, vector.z);
-    }
-
-    static xyz2key(x, y, z) {
-        return `${x|0},${y|0},${z|0}`;
+    /**
+     * @param {THREE.Box3} bounds
+     * @param {PhysicsTriangle[]} target
+     */
+    getTrianglesInBounds(bounds, target) {
+        this.meshes.forEach((mesh) => mesh.getTrianglesInBounds(bounds, target));
     }
 }
