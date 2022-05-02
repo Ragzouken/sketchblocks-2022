@@ -71,24 +71,6 @@ const tileUVs = `
     #endif
 `;
 
-function randomDesign(tile = undefined, rot = undefined) {
-    const design = [];
-
-    tile = tile ?? THREE.MathUtils.randInt(0, 64);
-    rot = rot ?? THREE.MathUtils.randInt(0, 7);
-
-    for (let f = 0; f < 4; ++f) {
-        for (let s = 0; s < 8; ++s) {
-            design.push(tile*4+f, rot);
-        }
-    }
-    return design;
-}
-
-function repeatDesign(design) {
-    return [...design, ...design, ...design, ...design];
-}
-
 /** 
  * @param {THREE.Shader} shader
  */

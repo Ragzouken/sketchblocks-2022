@@ -35,6 +35,38 @@ function pushTriangle(target, triangle) {
     pushVector(target, triangle.a);
 }
 
+function randomDesign(tile = undefined, rot = undefined) {
+    const design = [];
+
+    tile = tile ?? THREE.MathUtils.randInt(0, 64);
+    rot = rot ?? THREE.MathUtils.randInt(0, 7);
+
+    for (let f = 0; f < 4; ++f) {
+        for (let s = 0; s < 8; ++s) {
+            design.push(tile*4+f, rot);
+        }
+    }
+    return design;
+}
+
+function repeatDesign(design) {
+    return [...design, ...design, ...design, ...design];
+}
+
+function boxDesign(top, side) {
+    return repeatDesign([top, 0, top, 0, side, 0, side, 0, side, 0, side, 0, side, 0, side, 0]);
+}
+
+function animatedDesign(...frames) {
+    const design = [];
+    for (const [tile, rot] of frames) {
+        for (let s = 0; s < 8; ++s) {
+            design.push(tile, rot);
+        }
+    }
+    return design;
+}
+
 const leveldata = {
     blocks: [
         ["ramp", [ 0, -1,  1], 9],
@@ -137,11 +169,14 @@ async function start() {
 
     const renderer = new THREE.WebGLRenderer({ alpha: true });
     renderer.setSize(w, h);
-    visible.appendChild(renderer.domElement);
+    document.getElementById("renderer").appendChild(renderer.domElement);
 
     const dialogue = document.getElementById("dialogue");
     renderer.domElement.parentElement.append(dialogue);
     dialogue.hidden = true;
+
+    const blockShapeSelect = ui.radio("block-shape");
+    blockShapeSelect.selectedIndex = 0;
 
     // camera
     const scene = new THREE.Scene();
@@ -180,13 +215,62 @@ async function start() {
     const kinematic = new KinematicGuy();
     const guy = new THREE.Object3D();
 
-    const blockDesignData = new BlockDesignData(8, 4, 32);
-    for (let i = 0; i < blockDesignData.count; ++i) {
-        blockDesignData.setDesignAt(i, randomDesign());
+    /**
+     * @typedef {Object} BlockDesign
+     * @property {string} name
+     * @property {number[]} data
+     * @property {number} thumb
+     */
+
+    /** @type {BlockDesign[]} */
+    const designs = [];
+
+    designs.push({ name: "cave", thumb: 13, data: boxDesign(31, 13) });
+    designs.push({ name: "fan", thumb: 20, data:  animatedDesign([20, 0], [21, 0], [20, 1], [21, 1])});
+    designs.push({ name: "meat", thumb: 16, data: randomDesign(4) });
+    designs.push({ name: "water", thumb: 14, data: animatedDesign([14, 0], [14, 4], [14, 0], [14, 4]) });
+
+    for (let i = 0; i < 16; ++i) {
+        const tile = THREE.MathUtils.randInt(32, 96);
+        const data = repeatDesign([tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0]);
+        designs.push({ name: `random ${i}`, thumb: tile, data });
     }
-    blockDesignData.setDesignAt(0, repeatDesign([31, 0, 31, 0, 13, 0, 13, 0, 13, 0, 13, 0, 13, 0, 13, 0]));
-    blockDesignData.setDesignAt(1, [20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 21, 0, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 20, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1, 21, 1]);
-    blockDesignData.setDesignAt(2, randomDesign(4, 0));
+
+    const blockDesignData = new BlockDesignData(8, 4, designs.length);
+    designs.forEach((design, i) => blockDesignData.setDesignAt(i, design.data));
+
+    // const options = designs.map((design, i) => html("option", { title: design.name }, design.name));
+    // blockDesignSelect.replaceChildren(...options);
+    // blockDesignSelect.selectedIndex = 0;
+
+    async function getCanvasBlob(canvas) {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(resolve);
+        });
+    } 
+
+    const canvas = html("canvas", { width: tilesTex.image.width, height: tilesTex.image.height });
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(tilesTex.image, 0, 0);
+    const blob = await getCanvasBlob(canvas);
+    const src = URL.createObjectURL(blob);
+
+    const designSelect = document.querySelector("#design-select");
+    const tileToggleTemplate = designSelect.querySelector("label");
+
+    tileToggleTemplate.remove();
+
+    designs.forEach((design) => {
+        const x = -design.thumb % 16;
+        const y = 512 + 32 * (1 + Math.floor(design.thumb / 16));
+
+        const toggle = tileToggleTemplate.cloneNode(true);
+        toggle.querySelector("input").style = `background: url(${src}); background-position: ${x*16*2}px ${y}px; background-size: 512px`;
+        designSelect.append(toggle);
+    });
+
+    const blockDesignSelect = ui.radio("design-select");
+    blockDesignSelect.selectedIndex = 0;
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
@@ -285,9 +369,15 @@ async function start() {
         const index = billboards.count++;
         billboards.setPositionAt(index, billb.position);
         billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), vertical);
-        billboards.setTileAt(index, Math.floor(tile), Math.floor((tile % 1) * 10));
+        billboards.setTileAt(index, tile, 0);
     });
-    billboards.update();
+
+    function addRandomGuy(position) {
+        const index = billboards.count++;
+        billboards.setPositionAt(index, position);
+        billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), true);
+        billboards.setTileAt(index, THREE.MathUtils.randInt(255-31, 255), 0);
+    }
 
     billbs.push(guy);
     guy.userData.vert = true;
@@ -307,6 +397,12 @@ async function start() {
     let frame = 0;
     let timer = 0;
 
+    let blockTemplate = {
+        type: "cube",
+        rotation: 0,
+        design: 0,
+    }
+
     let hoveredBlock = {
         mesh: /** @type {BlockShapeInstances} */ (undefined),
         normal: new THREE.Vector3(),
@@ -319,20 +415,24 @@ async function start() {
 
         timer = (timer + 1) % 20;
         
-        if (timer === 0) {
-            const position = new THREE.Vector3(
-                THREE.MathUtils.randInt(-9, 9),
-                THREE.MathUtils.randInt(-9,-1),
-                THREE.MathUtils.randInt(-9, 9),
-            );
+        // if (timer === 0) {
+        //     const position = new THREE.Vector3(
+        //         THREE.MathUtils.randInt(-9, 9),
+        //         THREE.MathUtils.randInt(-9,-1),
+        //         THREE.MathUtils.randInt(-9, 9),
+        //     );
 
-            blockMap.setBlockAt(
-                position, 
-                types[THREE.MathUtils.randInt(0, types.length - 1)],
-                THREE.MathUtils.randInt(0, 7),
-                THREE.MathUtils.randInt(0, 2),
-            );
-        }
+        //     blockMap.setBlockAt(
+        //         position, 
+        //         types[THREE.MathUtils.randInt(0, types.length - 1)],
+        //         THREE.MathUtils.randInt(0, 7),
+        //         THREE.MathUtils.randInt(0, designs.length - 1),
+        //     );
+
+        //     if (Math.random() < .1) {
+        //         addRandomGuy(position.setY(position.y + 1));
+        //     }
+        // }
     
         billboards.update();
 
@@ -357,9 +457,6 @@ async function start() {
                 hoveredBlock.normal.fromBufferAttribute(selectionCube.geometry.getAttribute("normal"), first.face.a);
                 hoveredBlock.normal.applyNormalMatrix(normalMatrix);
 
-                // pushVector(pointsVerts, first.point);
-                // pushVector(pointsVerts, first.point.clone().add(normal));
-
                 const orthoIndex = orthoNormals.findIndex((o) => o.distanceToSquared(hoveredBlock.normal) < 0.1);
                 const quat = orthoOrients[orthoIndex];
                 selectionCube.rotation.setFromQuaternion(quat);
@@ -376,8 +473,6 @@ async function start() {
                 const face = mesh.getFaceIndex(first.faceIndex);
                 //mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
-                debug.textContent = `instance: ${first?.instanceId}, face: ${face}, (click to rotate face)`;
-
                 hoveredBlock.mesh = mesh;
                 hoveredBlock.instanceId = first.instanceId;
 
@@ -385,23 +480,6 @@ async function start() {
                     const prev = mesh.getRotationAt(first.instanceId);
                     const next = S4Ops[0][prev];
                     mesh.setRotationAt(first.instanceId, next); 
-
-                    // const designIndex = mesh.getDesignAt(first.instanceId);
-                    // const design = [];
-                    // blockDesignData.getDesignAt(designIndex, design);
-
-                    // const index = frame * 16 + face * 2;
-                    // let [tile, rotation] = [design[index + 0], design[index + 1]];
-                    // rotation = (rotation + 1) % 4;
-                    // tile = (Math.floor(tile / 4)*4 + 4) % 256;
-
-                    // for (let i = 0; i < 4; ++i) {
-                    //     design[i * 16 + face * 2 + 0] = tile+i;
-                    //     // design[i * 16 + face * 2 + 1] = rotation;
-                    // }
-
-                    // blockDesignData.setDesignAt(designIndex, design);
-                    // blockDesignData.update();
                 }
             }
         } else {
@@ -419,8 +497,20 @@ async function start() {
             if (pressed["MouseLeft"]) {
                 const base = new THREE.Vector3();
                 mesh.getPositionAt(instanceId, base);
-                const pos = base.clone().add(normal).round();
-                blockMap.setBlockAt(pos, "cube");
+
+                if (!held["Alt"]) {
+                    const pos = base.clone().add(normal).round();
+                    blockMap.setBlockAt(
+                        pos, 
+                        blockShapeSelect.value,
+                        blockTemplate.rotation,
+                        blockDesignSelect.selectedIndex,
+                    );
+                } else {
+                    blockTemplate = blockMap.getBlockAt(base);
+                    blockShapeSelect.setValueSilent(blockTemplate.type);
+                    blockDesignSelect.selectedIndex = blockTemplate.design;
+                }
             }
 
             if (pressed["MouseRight"]) {
@@ -465,6 +555,8 @@ async function start() {
                 const next = S4Ops[3][prev];
                 mesh.setRotationAt(instanceId, next); 
             }
+
+            mesh.update();
         }
 
         camera.getWorldDirection(billboards.cameraWorldDirection);
@@ -530,21 +622,14 @@ async function start() {
             for (let i = 0; i < split; ++i)
                 kinematic.move(motion, jump ? 5 : 0, 1/60/split);
 
-        // kinematic.contacts.forEach((contact) => {
-        //     pushTriangle(pointsVerts, contact.triangle.triangle);
-        // });
-        //kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
+        // kinematic.contacts.forEach((contact) => pushTriangle(pointsVerts, contact.triangle.triangle));
+        // kinematic.scene.triangles.forEach((triangle) => pushTriangle(pointsVerts, triangle.triangle));
 
         if (kinematic.nextPosition.y < -9) {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
             guy.position.copy(kinematic.prevPosition).y += (.5 - kinematic.capsule.radius);
             pivot.position.copy(guy.position);
-        }
-
-        /** @param {THREE.Vector3} vector */
-        function vec2str(vector) {
-            return `${vector.x.toPrecision(2)},${vector.y.toPrecision(2)},${vector.z.toPrecision(2)}`
         }
 
         guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
@@ -586,10 +671,9 @@ async function start() {
         held["Mouse"] = false;
     });
 
-    window.addEventListener("mousedown", (event) => {
+    renderer.domElement.addEventListener("mousedown", (event) => {
         if (event.button === 0) pressed["MouseLeft"] = true;
         if (event.button === 2) pressed["MouseRight"] = true;
-        event.preventDefault();
     })
 
     window.addEventListener("contextmenu", (event) => {
@@ -599,6 +683,8 @@ async function start() {
     window.addEventListener("keydown", (event) => {
         held[event.key] = true;
         pressed[event.key] = true;
+
+        if (event.key.includes("Arrow")) event.preventDefault();
     });
 
     window.addEventListener("keyup", (event) => {
@@ -650,11 +736,20 @@ class BlockMap extends THREE.Object3D {
     }
 
     getBlockAt(position) {
-        return this.blocks.get(vec2key(position));
+        const block = this.blocks.get(vec2key(position));
+        if (!block) return undefined;
+
+        const mesh = this.meshes.get(block.type);
+
+        return {
+            type: block.type,
+            rotation: mesh.getRotationAt(block.index),
+            design: mesh.getDesignAt(block.index),
+        }
     }
 
     delBlockAt(position) {
-        const block = this.getBlockAt(position);
+        const block = this.blocks.get(vec2key(position));
         if (!block) return;
 
         const mesh = this.meshes.get(block.type);

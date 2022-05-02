@@ -10,6 +10,8 @@ html(lang="en")
         script
             include /library/stats.js
         script
+            include /js/maker.js
+        script
             include /js/blocks.js
         script
             include /js/physics.js
@@ -19,5 +21,29 @@ html(lang="en")
             include /js/start.js
     body(onload="start()")
         #visible
+            #renderer
+            #sidebar
+                div shift+QWEASD to rotate hovered block
+                b block shape
+                #shape-select.radio-select
+                    label
+                        input(type="radio" name="block-shape" value="cube" title="cube")
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAN1JREFUWIXtl1sOhCAMRe+dsFIWxlaZD8Q4aIGWx/zYxASk9JxITAowFvF4zMEBMGJMbPIso66n3fADvhUziPQmVsEjIq0EFdgiIi0MgTUi5Yup4B6RPFgKrokwcfeAn0QcAIQQAADe+y3gzAPSEZxfYLVIWZ8kHo9gtohUTxSYJdLa3xSwivTmdwv0FtaKqgUkkPWozAKSiDZI4mPaOTFegVfgFXAASPJvDYnLg2Nhe0vmypwVIrWmtBSYKtLTlksCQyKai0lLQCViuZppf0MmDq8wXObUwGfE8PX8C2fRhDJxNeP6AAAAAElFTkSuQmCC" alt="" />
+                    label
+                        input(type="radio" name="block-shape" value="ramp" title="ramp")
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAOVJREFUWIXFl0sOwyAMBe0o978AZ2DN8dxFMUpJSfwB/KRuGslvPERNA+AL1Y856Ckn+nYjtjHqeVMA2jADiBXgVm4FsQA8lmtBlgJIQLQA6vI3EA2Aq3wEckyZqAwRQcoFQPEbQjOTcqGqkyQGpqm3Zsn2bCCsnAFCbkJplm7/ZqBej8vy7dlAWDkD9EdQv4/Ltu3ZQFg5AxyX8u26r9m+PRsIK2eAEwAQEZlki+6nv2jkMSK863+2PHu4SjjViOfFRWxk9LAB56ubCOTfc15a3B/BKKKj8ajWphlJuUxVbQLxDPgAwxsPmtbYpEcAAAAASUVORK5CYII=" alt="" />
+                    label
+                        input(type="radio" name="block-shape" value="slab" title="slab")
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAANlJREFUWIXtl+0KwyAMRe8dPmkfrK/qfrQW5xpNonYMDBRsjTmHCn4AK1as+POI5+MOdoAR48EmrzLmetYBH+CvYg4RbWIV3CPSSjCBPSJSRxfYIlJ+GArWiKTGVHBNhAf3GfCdSACAfd8BANu2PQJOPOCYgusPzBYp65PE7RSMFpHqiQKjRFrjmwJeEW2+WkBb2CpqFpBA3qlyC0gi1kjrAEn+bCUMqXF2PL4XhDJnhkhtNywFhopozgOSQJeI5UTUEjCJeM6EL21iVpgkcxiyd1rgI6L7XvAGfYqEJKzCIxIAAAAASUVORK5CYII=" alt="" />
+                    label
+                        input(type="radio" name="block-shape" value="wedgeHead" title="wedge head")
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAMBJREFUWIXtlksOgCAMBcH73wCvoFu9XV3gB03BfqAu5K1MjJ1B5QXnenp6/h6vfB60szQCAHDxvT9HsWZKBW7w20CmiEQgC5eIcAVIcI4IR4ANp4hQBVTwkghFoBocE3kTaAJPJYav4OO8Fu9Dy4RpgX116ApN4DkBMzgmYAp/CpjDU4FP4KmA2y/M4AcP3QG1RArfnFQuKpHM3y5qNbYIss+r1ClJ5NFwTXo8KxKmRQQWnwldNIlDhAfSGlG/6g3GLFUjqVwKeAAAAABJRU5ErkJggg==" alt="" />
+                    label
+                        input(type="radio" name="block-shape" value="wedgeBody" title="wedge body")
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAQZJREFUWIXF11sOgyAQBdCZhsX1u2voruwW7K/dHf0QDBAeM5eHJE1thLnHihGI+pp1H7hxT7i1ZzbzVUZdDwVc4VExAIIAsuEoRAtohmshGoAqXAqRAuDwFkQCGBJegrQAw8NTyOOu8M/3Vz1vZ7ZtP6y7uuwVLgkvAZaF5wBLw1PA8vAQcEt4BNj2o9pxRngECAeMgkjqFG9BL0Q6tjkHEIimv3gSSiFarPopqEGQWwY/hikEnS9EZJk63nr+jfZ+PaHxzEzm/Gb/V0CFkGB/aPyBOzEVkluSmbTPDEhtUZoChkIky/ISoAui2Zi0ACoIsjWrLUpLEGbmMIyC36wJH9G6t+d/bOwe4N1P9WAAAAAASUVORK5CYII=" alt="" />
+                b block design
+                #design-select.radio-select
+                    label
+                        input(type="radio" name="design-select" value="" title="")
         #debug
         #dialogue
