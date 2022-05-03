@@ -183,12 +183,12 @@ async function start() {
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.setZ(5);
 
-    const pivot = new THREE.Object3D();
-    scene.add(pivot);
-
-    pivot.position.set(0, 0, 0);
-    pivot.rotation.order = "ZYX";
-    pivot.add(camera);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.mouseButtons.LEFT = -1;
+    controls.mouseButtons.MIDDLE = -1;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    controls.enablePan = false;
+    controls.rotateSpeed = .5;
 
     // level
     const level = new THREE.Object3D();
@@ -225,15 +225,33 @@ async function start() {
     /** @type {BlockDesign[]} */
     const designs = [];
 
+    function addTileDesign(name, tile) {
+        designs.push({ name, thumb: tile, data: boxDesign(tile, tile) });
+    }
+
     designs.push({ name: "cave", thumb: 13, data: boxDesign(31, 13) });
     designs.push({ name: "fan", thumb: 20, data:  animatedDesign([20, 0], [21, 0], [20, 1], [21, 1])});
     designs.push({ name: "meat", thumb: 16, data: randomDesign(4) });
     designs.push({ name: "water", thumb: 14, data: animatedDesign([14, 0], [14, 4], [14, 0], [14, 4]) });
+    addTileDesign("reeds", 27);
+    addTileDesign("roots", 28);
+    addTileDesign("trunks", 29);
+    addTileDesign("canopy", 30);
+    addTileDesign("mud", 26);
+    addTileDesign("hedge", 25);
+    addTileDesign("plant", 24);
+    addTileDesign("sticks", 23);
+    addTileDesign("lily pads", 22);
+    addTileDesign("bricks", 15);
+    addTileDesign("roof", 11);
+    addTileDesign("window", 22);
+    addTileDesign("door", 25);
+    addTileDesign("grate", 24);
+    addTileDesign("wall", 23);
 
-    for (let i = 0; i < 16; ++i) {
-        const tile = THREE.MathUtils.randInt(32, 96);
-        const data = repeatDesign([tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0, tile, 0]);
-        designs.push({ name: `random ${i}`, thumb: tile, data });
+    for (let i = 0; i < 13; ++i) {
+        const tile = i+32;
+        addTileDesign(`random ${i}`, tile);
     }
 
     const blockDesignData = new BlockDesignData(8, 4, designs.length);
@@ -264,9 +282,11 @@ async function start() {
         const x = -design.thumb % 16;
         const y = 512 + 32 * (1 + Math.floor(design.thumb / 16));
 
-        const toggle = tileToggleTemplate.cloneNode(true);
-        toggle.querySelector("input").style = `background: url(${src}); background-position: ${x*16*2}px ${y}px; background-size: 512px`;
-        designSelect.append(toggle);
+        const label = tileToggleTemplate.cloneNode(true);
+        const input = label.querySelector("input");
+        input.style = `background: url(${src}); background-position: ${x*16*2}px ${y}px; background-size: 512px`;
+        input.title = design.name;
+        designSelect.append(label);
     });
 
     const blockDesignSelect = ui.radio("design-select");
@@ -412,28 +432,8 @@ async function start() {
     function animate() {
         if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
         if (timer == 0) frame = (frame + 1) % 4;
-
         timer = (timer + 1) % 20;
-        
-        // if (timer === 0) {
-        //     const position = new THREE.Vector3(
-        //         THREE.MathUtils.randInt(-9, 9),
-        //         THREE.MathUtils.randInt(-9,-1),
-        //         THREE.MathUtils.randInt(-9, 9),
-        //     );
 
-        //     blockMap.setBlockAt(
-        //         position, 
-        //         types[THREE.MathUtils.randInt(0, types.length - 1)],
-        //         THREE.MathUtils.randInt(0, 7),
-        //         THREE.MathUtils.randInt(0, designs.length - 1),
-        //     );
-
-        //     if (Math.random() < .1) {
-        //         addRandomGuy(position.setY(position.y + 1));
-        //     }
-        // }
-    
         billboards.update();
 
         const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < 1.2);
@@ -451,7 +451,7 @@ async function start() {
         raycaster.setFromCamera(norm, camera);
         const [first] = raycaster.intersectObjects([level, selectionCube], true);
 
-        if (first) {
+        if (first && !held["MouseRight"]) {
             if (first.object === selectionCube) {
                 const normalMatrix = new THREE.Matrix3().getNormalMatrix(first.object.matrixWorld);
                 hoveredBlock.normal.fromBufferAttribute(selectionCube.geometry.getAttribute("normal"), first.face.a);
@@ -470,8 +470,8 @@ async function start() {
             } else {
                 const mesh = /** @type {BlockShapeInstances} */ (first.object);
                 
-                const face = mesh.getFaceIndex(first.faceIndex);
-                //mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
+                // const face = mesh.getFaceIndex(first.faceIndex);
+                // mesh.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
                 hoveredBlock.mesh = mesh;
                 hoveredBlock.instanceId = first.instanceId;
@@ -513,7 +513,7 @@ async function start() {
                 }
             }
 
-            if (pressed["MouseRight"]) {
+            if (pressed["x"]) {
                 const base = new THREE.Vector3();
                 mesh.getPositionAt(instanceId, base);
                 blockMap.delBlockAt(base);
@@ -584,12 +584,6 @@ async function start() {
         if (held["s"]) motion.add(forward.clone().multiplyScalar(-3));
         if (held["a"]) motion.add(left.clone().multiplyScalar(-3));
         if (held["d"]) motion.add(left.clone().multiplyScalar(3));
-        if (held["ArrowLeft"]) pivot.rotation.y -= .03;
-        if (held["ArrowRight"]) pivot.rotation.y += .03;
-        if (held["ArrowUp"]) pivot.rotation.x -= .03;
-        if (held["ArrowDown"]) pivot.rotation.x += .03;
-
-        pivot.rotation.x = THREE.MathUtils.clamp(pivot.rotation.x, -Math.PI/4, Math.PI/4);
 
         if (!dialogue.hidden && pressed["Enter"]) {
             dialogue.hidden = true;
@@ -629,7 +623,6 @@ async function start() {
             kinematic.nextPosition.y = 5;
             kinematic.prevPosition.copy(kinematic.nextPosition);
             guy.position.copy(kinematic.prevPosition).y += (.5 - kinematic.capsule.radius);
-            pivot.position.copy(guy.position);
         }
 
         guy.position.add(kinematic.nextPosition).y += (.5 - kinematic.capsule.radius);
@@ -641,10 +634,13 @@ async function start() {
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
         pointsVerts.length = 0;
 
-        pivot.position.lerp(guy.position, .25);
-
         requestAnimationFrame(animate);
 
+        const delta = guy.position.clone().sub(controls.target);
+        controls.target.add(delta);
+        camera.position.add(delta);
+
+        controls.update();
         stats.update();  
     };
 
@@ -664,16 +660,27 @@ async function start() {
         pointer.set(event.clientX, event.clientY);
         held["Mouse"] = true;
         pressed["Mouse"] = true;
+
+        const name = mouseButtons[event.button] ?? "Mouse";
+        held[name] = true;
     });
+
+    const mouseButtons = {
+        0: "MouseLeft",
+        2: "MouseRight",
+    }
 
     window.addEventListener("pointerup", (event) => {
         pointer.set(event.clientX, event.clientY);
         held["Mouse"] = false;
+
+        const name = mouseButtons[event.button] ?? "Mouse";
+        held[name] = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (event) => {
-        if (event.button === 0) pressed["MouseLeft"] = true;
-        if (event.button === 2) pressed["MouseRight"] = true;
+        const name = mouseButtons[event.button] ?? "Mouse";
+        pressed[name] = true;
     })
 
     window.addEventListener("contextmenu", (event) => {
