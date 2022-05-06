@@ -10,7 +10,9 @@ html(lang="en")
         script
             include /library/stats.js
         script
-            include /library/orbit.js
+            include /library/orbit.js        
+        script
+            include /js/utility.js
         script
             include /js/maker.js
         script
@@ -21,7 +23,7 @@ html(lang="en")
             include /js/rendering.js
         script
             include /js/start.js
-    body(onload="start()")
+    body
         #visible
             #renderer
             #sidebar
@@ -49,3 +51,5 @@ html(lang="en")
                         input(type="radio" name="design-select" value="" title="")
         #debug
         #dialogue
+        script#editor-embed(type="application/json" data-editor-only)
+            include default.json

@@ -1,20 +1,4 @@
 /**
- * @param {HTMLElement} element 
- */
-function scaleElementToParent(element) {
-    const parent = element.parentElement;
-
-    const [tw, th] = [parent.clientWidth, parent.clientHeight];
-    const [sw, sh] = [tw / element.clientWidth, th / element.clientHeight];
-    let scale = Math.min(sw, sh);
-    scale = scale > 1 ? Math.floor(scale) : scale;
-    
-    element.style.setProperty("transform", `translate(-50%, -50%) scale(${scale})`);
-
-    return scale;
-}
-
-/**
  * @param {number[]} target
  * @param {THREE.Vector3} vector
  */
@@ -68,37 +52,6 @@ function animatedDesign(...frames) {
 }
 
 const leveldata = {
-    blocks: [
-        ["ramp", [ 0, -1,  1], 9],
-        ["ramp", [-1, -1,  1], 3],
-        ["ramp", [-1, -1,  0], 10],
-
-        ["cube", [-1,  0,  0]],
-        ["cube", [ 0,  0,  0]],
-        ["cube", [ 1,  0,  0]],
-        ["slab", [ 1,  0, -1], 8],
-        ["slab", [ 0,  0,  1], 0],
-        ["slab", [ 1,  0,  1], 0],
-
-        ["wedgeHead", [-2, 1, 0], 20],
-        ["wedgeBody", [-2, 0, 0], 20],
-
-        ["wedgeHead", [-2, 3, 0], 12],
-        ["wedgeBody", [-3, 4, 0], 12],
-
-        ["cube", [-1,  1,  0]],
-        ["ramp", [ 0,  1,  0], 1],
-        ["ramp", [-1,  1, -1], 10],
-
-        ["cube", [-1,  2, -1]],
-        ["ramp", [ 0,  2, -1], 9],
-
-        ["slab", [ 0,  3, -1], 0],
-
-        ["wedgeHead", [3, 0, 1], 0],
-        ["wedgeBody", [3, 0, 0], 0],
-    ],
-
     sprites: [
         { tile: 8, position: [ 0, 3.5, -1], vertical: true, text: "so refined.."},
         { tile: 6, position: [1,  1,  -1], text: "I AM ORB." },
@@ -159,6 +112,10 @@ function makeGeometry(data) {
 }
 
 async function start() {
+    /** @type {BlocksDataProject} */
+    const data = JSON.parse(document.querySelector("#editor-embed").textContent);
+    const tilesImage = await loadImage(data.tileset);
+
     const stats = Stats()
     document.body.appendChild(stats.dom)
 
@@ -198,11 +155,11 @@ async function start() {
     const guyFallTile = 5;
     const speakTile = 10;
 
-    const loader = new THREE.TextureLoader();
-    const tilesTex = await loader.loadAsync("tiles.png");
+    const tilesTex = new THREE.Texture(tilesImage);
     tilesTex.magFilter = THREE.NearestFilter;
     tilesTex.minFilter = THREE.NearestFilter;
     tilesTex.generateMipmaps = false;
+    tilesTex.needsUpdate = true;
 
     const geometries = {
         ramp: makeGeometry(ramp),
@@ -215,44 +172,38 @@ async function start() {
     const kinematic = new KinematicGuy();
     const guy = new THREE.Object3D();
 
-    /**
-     * @typedef {Object} BlockDesign
-     * @property {string} name
-     * @property {number[]} data
-     * @property {number} thumb
-     */
+    /** @type {BlocksDataDesign[]} */
+    const designs = data.designs;
+    // const designs = [];
 
-    /** @type {BlockDesign[]} */
-    const designs = [];
+    // function addTileDesign(name, tile) {
+    //     designs.push({ name, thumb: tile, data: boxDesign(tile, tile) });
+    // }
 
-    function addTileDesign(name, tile) {
-        designs.push({ name, thumb: tile, data: boxDesign(tile, tile) });
-    }
+    // designs.push({ name: "cave", thumb: 13, data: boxDesign(31, 13) });
+    // designs.push({ name: "fan", thumb: 20, data:  animatedDesign([20, 0], [21, 0], [20, 1], [21, 1])});
+    // designs.push({ name: "meat", thumb: 16, data: randomDesign(4) });
+    // designs.push({ name: "water", thumb: 14, data: animatedDesign([14, 0], [14, 4], [14, 0], [14, 4]) });
+    // addTileDesign("reeds", 27);
+    // addTileDesign("roots", 28);
+    // addTileDesign("trunks", 29);
+    // addTileDesign("canopy", 30);
+    // addTileDesign("mud", 26);
+    // addTileDesign("hedge", 25);
+    // addTileDesign("plant", 24);
+    // addTileDesign("sticks", 23);
+    // addTileDesign("lily pads", 22);
+    // addTileDesign("bricks", 15);
+    // addTileDesign("roof", 11);
+    // addTileDesign("window", 22);
+    // addTileDesign("door", 25);
+    // addTileDesign("grate", 24);
+    // addTileDesign("wall", 23);
 
-    designs.push({ name: "cave", thumb: 13, data: boxDesign(31, 13) });
-    designs.push({ name: "fan", thumb: 20, data:  animatedDesign([20, 0], [21, 0], [20, 1], [21, 1])});
-    designs.push({ name: "meat", thumb: 16, data: randomDesign(4) });
-    designs.push({ name: "water", thumb: 14, data: animatedDesign([14, 0], [14, 4], [14, 0], [14, 4]) });
-    addTileDesign("reeds", 27);
-    addTileDesign("roots", 28);
-    addTileDesign("trunks", 29);
-    addTileDesign("canopy", 30);
-    addTileDesign("mud", 26);
-    addTileDesign("hedge", 25);
-    addTileDesign("plant", 24);
-    addTileDesign("sticks", 23);
-    addTileDesign("lily pads", 22);
-    addTileDesign("bricks", 15);
-    addTileDesign("roof", 11);
-    addTileDesign("window", 22);
-    addTileDesign("door", 25);
-    addTileDesign("grate", 24);
-    addTileDesign("wall", 23);
-
-    for (let i = 0; i < 13; ++i) {
-        const tile = i+32;
-        addTileDesign(`random ${i}`, tile);
-    }
+    // for (let i = 0; i < 13; ++i) {
+    //     const tile = i+32;
+    //     addTileDesign(`random ${i}`, tile);
+    // }
 
     const blockDesignData = new BlockDesignData(8, 4, designs.length);
     designs.forEach((design, i) => blockDesignData.setDesignAt(i, design.data));
@@ -363,10 +314,10 @@ async function start() {
         return norm;
     }
 
-    const types = Array.from(Object.keys(geometries));
-    leveldata.blocks.forEach((block, i) => {
-        const [type, position, rotation = 0] = block;
-        blockMap.setBlockAt(new THREE.Vector3(...position), type, rotation);
+    data.blocks.forEach((block) => {
+        const [x, y, z, r, s, d] = block;
+        const shape = data.shapes.find((shape) => shape.id === s);
+        blockMap.setBlockAt(new THREE.Vector3(x, y, z), shape.name, r, d);
     });
     
     /** @type {THREE.Object3D[]} */
@@ -429,6 +380,36 @@ async function start() {
         instanceId: 0,
     };
 
+    /**
+     * @returns {BlocksDataProject}
+     */
+    function dumpLevel() {
+        const vector = new THREE.Vector3();
+        const shapes = Array.from(blockMap.meshes.keys()).map((name, i) => ({ name, id: i }));
+        const designs_ = designs.map((design, i) => ({ ...design, id: i }));
+        const blocks = [];
+        shapes.forEach(({ name, id: s }) => {
+            const mesh = blockMap.meshes.get(name);
+            for (let i = 0; i < mesh.count; ++i) {
+                mesh.getPositionAt(i, vector);
+                const [x, y, z] = [vector.x, vector.y, vector.z];
+                const r = mesh.getRotationAt(i);
+                const d = mesh.getDesignAt(i);
+
+                blocks.push([x, y, z, r, s, d]);
+            }
+        });
+
+        return {
+            designs: designs_,
+            shapes,
+            blocks,
+            tileset: canvas.toDataURL(),
+        }
+    }
+
+    // console.log(JSON.stringify(dumpLevel()));
+
     function animate() {
         if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
         if (timer == 0) frame = (frame + 1) % 4;
@@ -465,7 +446,7 @@ async function start() {
                 mesh.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
 
                 if (pressed["Mouse"]) {
-                    mesh.setTileAt(first.instanceId, THREE.MathUtils.randInt(0, 255), THREE.MathUtils.randInt(0, 7));
+                    mesh.setTileAt(first.instanceId, THREE.MathUtils.randInt(255-32, 255), 0);
                 }
             } else {
                 const mesh = /** @type {BlockShapeInstances} */ (first.object);
@@ -780,3 +761,5 @@ class BlockMap extends THREE.Object3D {
         this.meshes.forEach((mesh) => mesh.getTrianglesInBounds(bounds, target));
     }
 }
+
+window.addEventListener("DOMContentLoaded", start);
