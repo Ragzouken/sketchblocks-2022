@@ -51,66 +51,6 @@ function animatedDesign(...frames) {
     return design;
 }
 
-const leveldata = {
-    sprites: [
-        { tile: 8, position: [ 0, 3.5, -1], vertical: true, text: "so refined.."},
-        { tile: 6, position: [1,  1,  -1], text: "I AM ORB." },
-    ],
-}
-
-function makeGeometry(data) {
-    const positions = [];
-    const texcoords = [];
-    const normals = [];
-    const indexes = [];
-    const faces = [];
-
-    let nextIndex = 0;
-
-    data.faces.forEach((face, faceIndex) =>
-    {
-        // offset indices relative to existing vertices
-        const faceIndexes = face.triangles
-            .reduce((a, b) => [...a, ...b], [])
-            .map(index => nextIndex + index);
-
-        indexes.push(...faceIndexes);
-        nextIndex += face.positions.length;
-
-        // compute shared normal and add all positions/texcoords/normals
-        const p0 = new THREE.Vector3(...face.positions[0]);
-        const p1 = new THREE.Vector3(...face.positions[1]);
-        const p2 = new THREE.Vector3(...face.positions[2]);
-        
-        const normal = new THREE.Vector3();
-        normal.crossVectors(p1.sub(p0), p2.sub(p0)).normalize(); 
-
-        for (let i = 0; i < face.positions.length; ++i)
-        {
-            positions.push(...face.positions[i]);
-            texcoords.push(...face.texturing[i]);
-            faces.push(faceIndex);
-            normals.push(normal.x, normal.y, normal.z);
-        }
-    });
-
-    const p = new THREE.BufferAttribute(new Float32Array(positions), 3);
-    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 2);
-    const n = new THREE.BufferAttribute(new Float32Array(normals), 3);
-    const f = new THREE.BufferAttribute(new Float32Array(faces), 1);
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", p);
-    geometry.setAttribute("normal", n);
-    geometry.setAttribute("uv", t);
-    geometry.setAttribute("face", f);
-    geometry.setIndex(indexes);
-
-    geometry.translate(-.5, -.5, -.5);
-
-    return geometry;
-}
-
 async function start() {
     /** @type {BlocksDataProject} */
     const data = JSON.parse(document.querySelector("#editor-embed").textContent);
@@ -132,8 +72,20 @@ async function start() {
     renderer.domElement.parentElement.append(dialogue);
     dialogue.hidden = true;
 
+    ONE("[name='sprite-create']").addEventListener("click", () => placingSprite = createSprite);
+    ONE("[name='sprite-deselect']").addEventListener("click", () => deselectSprite());
+    ONE("[name='sprite-delete']").addEventListener("click", () => deleteSprite());
+    ONE("[name='sprite-move']").addEventListener("click", () => placingSprite = moveSprite);
+
+    const modeSelect = ui.radio("mode-select");
+
+    modeSelect.tab(ONE("#block-controls"), "blocks");
+    modeSelect.tab(ONE("#sprite-controls"), "sprites");
+
     const blockShapeSelect = ui.radio("block-shape");
     blockShapeSelect.selectedIndex = 0;
+
+    modeSelect.selectedIndex = 0;
 
     // camera
     const scene = new THREE.Scene();
@@ -174,49 +126,9 @@ async function start() {
 
     /** @type {BlocksDataDesign[]} */
     const designs = data.designs;
-    // const designs = [];
 
-    // function addTileDesign(name, tile) {
-    //     designs.push({ name, thumb: tile, data: boxDesign(tile, tile) });
-    // }
-
-    // designs.push({ name: "cave", thumb: 13, data: boxDesign(31, 13) });
-    // designs.push({ name: "fan", thumb: 20, data:  animatedDesign([20, 0], [21, 0], [20, 1], [21, 1])});
-    // designs.push({ name: "meat", thumb: 16, data: randomDesign(4) });
-    // designs.push({ name: "water", thumb: 14, data: animatedDesign([14, 0], [14, 4], [14, 0], [14, 4]) });
-    // addTileDesign("reeds", 27);
-    // addTileDesign("roots", 28);
-    // addTileDesign("trunks", 29);
-    // addTileDesign("canopy", 30);
-    // addTileDesign("mud", 26);
-    // addTileDesign("hedge", 25);
-    // addTileDesign("plant", 24);
-    // addTileDesign("sticks", 23);
-    // addTileDesign("lily pads", 22);
-    // addTileDesign("bricks", 15);
-    // addTileDesign("roof", 11);
-    // addTileDesign("window", 22);
-    // addTileDesign("door", 25);
-    // addTileDesign("grate", 24);
-    // addTileDesign("wall", 23);
-
-    // for (let i = 0; i < 13; ++i) {
-    //     const tile = i+32;
-    //     addTileDesign(`random ${i}`, tile);
-    // }
-
-    const blockDesignData = new BlockDesignData(8, 4, designs.length);
-    designs.forEach((design, i) => blockDesignData.setDesignAt(i, design.data));
-
-    // const options = designs.map((design, i) => html("option", { title: design.name }, design.name));
-    // blockDesignSelect.replaceChildren(...options);
-    // blockDesignSelect.selectedIndex = 0;
-
-    async function getCanvasBlob(canvas) {
-        return new Promise((resolve, reject) => {
-            canvas.toBlob(resolve);
-        });
-    } 
+    const blockDesignData = new BlockDesignData(8, 4, data.designs.length);
+    data.designs.forEach((design, i) => blockDesignData.setDesignAt(i, design.data));
 
     const canvas = html("canvas", { width: tilesTex.image.width, height: tilesTex.image.height });
     const ctx = canvas.getContext("2d");
@@ -224,12 +136,11 @@ async function start() {
     const blob = await getCanvasBlob(canvas);
     const src = URL.createObjectURL(blob);
 
-    const designSelect = document.querySelector("#design-select");
-    const tileToggleTemplate = designSelect.querySelector("label");
-
+    const designSelectContainer = document.querySelector("#design-select");
+    const tileToggleTemplate = designSelectContainer.querySelector("label");
     tileToggleTemplate.remove();
 
-    designs.forEach((design) => {
+    data.designs.forEach((design) => {
         const x = -design.thumb % 16;
         const y = 512 + 32 * (1 + Math.floor(design.thumb / 16));
 
@@ -237,11 +148,38 @@ async function start() {
         const input = label.querySelector("input");
         input.style = `background: url(${src}); background-position: ${x*16*2}px ${y}px; background-size: 512px`;
         input.title = design.name;
-        designSelect.append(label);
+        designSelectContainer.append(label);
     });
 
     const blockDesignSelect = ui.radio("design-select");
     blockDesignSelect.selectedIndex = 0;
+
+    const spriteSelectContainer = document.querySelector("#sprite-select");
+    const spriteToggleTemplate = spriteSelectContainer.querySelector("label");
+    spriteToggleTemplate.remove();
+
+    const spriteTiles = (new Array(32)).fill(0).map((_, i) => i + 255 - 31);
+
+    spriteTiles.forEach((tile) => {
+        const x = -tile % 16;
+        const y = 512 + 32 * (1 + Math.floor(tile / 16));
+
+        const label = spriteToggleTemplate.cloneNode(true);
+        const input = label.querySelector("input");
+        input.style = `background: url(${src}); background-position: ${x*16*2}px ${y}px; background-size: 512px`;
+        input.title = `tile ${tile}`;
+        input.value = tile.toString();
+        spriteSelectContainer.append(label);
+    });
+
+    const spriteSelect = ui.radio("sprite-select");
+    spriteSelect.selectedIndex = 0;
+
+    const spriteDialogue = ONE("textarea[name='sprite-dialogue']");
+    spriteDialogue.addEventListener("input", () => {
+        if (!selectedSprite) return;
+        selectedSprite.dialogue = spriteDialogue.value;
+    });
 
     const blockMaterial = new THREE.MeshBasicMaterial({ 
         side: THREE.DoubleSide, 
@@ -314,44 +252,34 @@ async function start() {
         return norm;
     }
 
+    const sprite2instance = new Map();
+    const instance2sprite = new Map();
+
     data.blocks.forEach((block) => {
         const [x, y, z, r, s, d] = block;
         const shape = data.shapes.find((shape) => shape.id === s);
         blockMap.setBlockAt(new THREE.Vector3(x, y, z), shape.name, r, d);
     });
     
-    /** @type {THREE.Object3D[]} */
-    const billbs = [];
-
     const guyIndex = billboards.count++;
     billboards.setAxisAt(guyIndex, new THREE.Vector3(0, 1, 0), true);
 
     const promptIndex = billboards.count++;
     billboards.setAxisAt(promptIndex, new THREE.Vector3(0, 1, 0), true);
 
-    leveldata.sprites.forEach((sprite, i) => {
-        const { tile, position, vertical, text } = sprite;
-        const billb = new THREE.Object3D();
-        billb.position.set(...position);
-        billb.userData.vert = vertical;
-        billb.userData.text = text;
-        billbs.push(billb);
+    data.characters.forEach((character, i) => {
+        const { tile, position, id } = character;
 
         const index = billboards.count++;
-        billboards.setPositionAt(index, billb.position);
-        billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), vertical);
+
+        billboards.setPositionAt(index, new THREE.Vector3(...position));
+        billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), true);
         billboards.setTileAt(index, tile, 0);
+
+        sprite2instance.set(id, index);
+        instance2sprite.set(index, id);
     });
 
-    function addRandomGuy(position) {
-        const index = billboards.count++;
-        billboards.setPositionAt(index, position);
-        billboards.setAxisAt(index, new THREE.Vector3(0, 1, 0), true);
-        billboards.setTileAt(index, THREE.MathUtils.randInt(255-31, 255), 0);
-    }
-
-    billbs.push(guy);
-    guy.userData.vert = true;
     level.add(guy);
     guy.position.setY(2);
 
@@ -380,6 +308,8 @@ async function start() {
         instanceId: 0,
     };
 
+    let selectedSprite = undefined;
+
     /**
      * @returns {BlocksDataProject}
      */
@@ -404,50 +334,77 @@ async function start() {
             designs: designs_,
             shapes,
             blocks,
+            characters: data.characters,
             tileset: canvas.toDataURL(),
         }
     }
 
-    // console.log(JSON.stringify(dumpLevel()));
+    async function makeExportHTML() {
+        const bundle = dumpLevel();
 
-    function animate() {
-        if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
-        if (timer == 0) frame = (frame + 1) % 4;
-        timer = (timer + 1) % 20;
+        // make a copy of this web page
+        const clone = /** @type {HTMLElement} */ (document.documentElement.cloneNode(true));
+        // remove some unwanted elements from the page copy
+        ALL("[data-empty]", clone).forEach((element) => element.replaceChildren());
+        ALL("[data-editor-only]", clone).forEach((element) => element.remove());
+        // insert the project bundle data into the page copy 
+        ONE("#bundle-embed", clone).innerHTML = JSON.stringify(bundle);
 
-        billboards.update();
+        ONE("#player", clone).hidden = false;
 
-        const nearby = billbs.find((bilb) => bilb !== guy && bilb.userData.text && bilb.position.distanceTo(guy.position) < 1.2);
+        // default to player mode
+        clone.setAttribute("data-app-mode", "player");
+
+        return clone.outerHTML;
+    }
+
+    function updatePlayback() {
+        if (modeSelect.value !== "game") {
+            dialogue.hidden = true;
+            billboards.setTileAt(promptIndex, 0);
+            return;
+        }
+
+        const nearby = data.characters.find((char) => char.dialogue && guy.position.distanceTo(new THREE.Vector3(...char.position)) < 1.2);
 
         if (nearby && dialogue.hidden) {
-            billboards.setPositionAt(promptIndex, new THREE.Vector3().copy(nearby.position).add(new THREE.Vector3(0, 1, 0)));
+            billboards.setPositionAt(promptIndex, 
+                new THREE.Vector3(...nearby.position).add(new THREE.Vector3(0, 1, 0)));
             billboards.setTileAt(promptIndex, speakTile);
         } else {
             billboards.setTileAt(promptIndex, 0);
         }
 
-        renderer.render(scene, camera);
+        if (!dialogue.hidden && pressed["Enter"]) {
+            dialogue.hidden = true;
+        } else if (nearby && pressed["Enter"]) {
+            dialogue.textContent = nearby.dialogue;
+            dialogue.hidden = false;
+        }
+    }
+
+    function updateBlocksEdit() {
+        if (modeSelect.value !== "blocks") {
+            hoveredBlock.mesh = undefined;
+            selectionCube.visible = false;
+            return;
+        }
 
         const norm = getNormalisePointer();
         raycaster.setFromCamera(norm, camera);
-        const [first] = raycaster.intersectObjects([level, selectionCube], true);
+        const [first] = raycaster.intersectObjects([blockMap, selectionCube], true);
+
+        if (first && first.object === selectionCube) {
+            const normalMatrix = new THREE.Matrix3().getNormalMatrix(first.object.matrixWorld);
+            hoveredBlock.normal.fromBufferAttribute(selectionCube.geometry.getAttribute("normal"), first.face.a);
+            hoveredBlock.normal.applyNormalMatrix(normalMatrix);
+        }
 
         if (first && !held["MouseRight"]) {
             if (first.object === selectionCube) {
-                const normalMatrix = new THREE.Matrix3().getNormalMatrix(first.object.matrixWorld);
-                hoveredBlock.normal.fromBufferAttribute(selectionCube.geometry.getAttribute("normal"), first.face.a);
-                hoveredBlock.normal.applyNormalMatrix(normalMatrix);
-
                 const orthoIndex = orthoNormals.findIndex((o) => o.distanceToSquared(hoveredBlock.normal) < 0.1);
                 const quat = orthoOrients[orthoIndex];
                 selectionCube.rotation.setFromQuaternion(quat);
-            } else if (first.object === billboards) {
-                const mesh = /** @type {BillboardInstances} */ (first.object);
-                mesh.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
-
-                if (pressed["Mouse"]) {
-                    mesh.setTileAt(first.instanceId, THREE.MathUtils.randInt(255-32, 255), 0);
-                }
             } else {
                 const mesh = /** @type {BlockShapeInstances} */ (first.object);
                 
@@ -467,10 +424,12 @@ async function start() {
             hoveredBlock.mesh = undefined;
         }
 
-        selectionCube.visible = hoveredBlock.mesh !== undefined;
+        const hovered = hoveredBlock.mesh !== undefined;
+
+        selectionCube.visible = hovered && modeSelect.value === "blocks";
         selectionCube.scale.set(1.01, 1.01, 1.01).multiplyScalar(hoveredBlock.mesh ? 1 : 0);
 
-        if (hoveredBlock.mesh) {
+        if (hovered) {
             const { mesh, instanceId, normal } = hoveredBlock;
 
             mesh.getPositionAt(instanceId, selectionCube.position);
@@ -500,46 +459,153 @@ async function start() {
                 blockMap.delBlockAt(base);
                 hoveredBlock.mesh = undefined;
             }
+            
+            const test2 = [
+                [0, 2],
+                [1, 4],
+                [2, 0],
+                [3, 5],
+                [4, 1],
+                [5, 3],
+            ];
 
-            if (pressed["A"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[0][prev];
-                mesh.setRotationAt(instanceId, next); 
-            }
+            if (first && first.object === selectionCube) {
+                const orthoIndex = orthoNormals.findIndex((o) => o.distanceToSquared(hoveredBlock.normal) < 0.1);
+                const [q, e] = test2[orthoIndex];
 
-            if (pressed["D"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[2][prev];
-                mesh.setRotationAt(instanceId, next); 
-            }
+                if (pressed["q"]) {
+                    const prev = mesh.getRotationAt(instanceId);
+                    const next = S4Ops[q][prev];
+                    mesh.setRotationAt(instanceId, next); 
+                }
 
-            if (pressed["Q"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[1][prev];
-                mesh.setRotationAt(instanceId, next); 
-            }
-
-            if (pressed["E"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[4][prev];
-                mesh.setRotationAt(instanceId, next); 
-            }
-
-            if (pressed["W"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[5][prev];
-                mesh.setRotationAt(instanceId, next); 
-            }
-
-            if (pressed["S"]) {
-                const prev = mesh.getRotationAt(instanceId);
-                const next = S4Ops[3][prev];
-                mesh.setRotationAt(instanceId, next); 
+                if (pressed["e"]) {
+                    const prev = mesh.getRotationAt(instanceId);
+                    const next = S4Ops[e][prev];
+                    mesh.setRotationAt(instanceId, next); 
+                }
             }
 
             mesh.update();
         }
+    }
 
+    let placingSprite = undefined;
+
+    function createSprite(position) {
+        const id = Math.max(...data.characters.map((char) => char.id)) + 1;
+        const instance = billboards.count++;
+        sprite2instance.set(id, instance);
+        instance2sprite.set(instance, id);
+
+        billboards.setPositionAt(instance, position);
+        billboards.setAxisAt(instance, new THREE.Vector3(0, 1, 0), true);
+        billboards.setTileAt(instance, 255, 0);
+
+        data.characters.push({id, dialogue: "", position: [...position], tile: 255 });
+        
+        selectSprite(id);
+    }
+
+    function moveSprite(position) {
+        const instance = sprite2instance.get(selectedSprite.id);
+        selectedSprite.position = [...position];
+        billboards.setPositionAt(instance, position);
+    }
+
+    function selectSprite(id) {
+        placingSprite = false;
+        ONE("#selected-sprite").hidden = false;
+
+        selectedSprite = data.characters.find((sprite) => sprite.id === id);
+        spriteSelect.setValueSilent(selectedSprite.tile);
+        spriteDialogue.value = selectedSprite.dialogue;
+    }
+
+    function deselectSprite() {
+        ONE("#selected-sprite").hidden = true;
+    }
+
+    function deleteSprite() {
+        data.characters.splice(data.characters.indexOf(selectedSprite), 1);
+
+        const instance = sprite2instance.get(selectedSprite.id);
+        sprite2instance.delete(selectedSprite.id);
+        instance2sprite.delete(instance);
+
+        if (instance !== billboards.count - 1) {
+            const lastSprite = instance2sprite.get(billboards.count - 1);
+
+            instance2sprite.set(instance, lastSprite);
+            sprite2instance.set(lastSprite, instance);
+            instance2sprite.delete(billboards.count - 1);
+
+            const sprite = data.characters.find((sprite) => sprite.id === lastSprite);
+            billboards.setPositionAt(instance, new THREE.Vector3(...sprite.position));
+            billboards.setTileAt(instance, sprite.tile); 
+        }
+        billboards.count -= 1;
+
+        deselectSprite();
+    }
+
+    function updateSpritesEdit() {
+        if (modeSelect.value !== "sprites") {
+            deselectSprite();
+            placingSprite = undefined;
+            return;
+        }
+
+        const norm = getNormalisePointer();
+        raycaster.setFromCamera(norm, camera);
+
+        if (placingSprite) {
+            const [first] = raycaster.intersectObjects([blockMap], true);
+
+            if (first) {
+                const face = first.object.getFaceIndex(first.faceIndex);
+                first.object.getFaceTriangles(first.instanceId, face).forEach((triangle) => pushTriangle(pointsVerts, triangle));
+
+                const position = new THREE.Vector3();
+                let count = 0;
+                first.object.getFaceTriangles(first.instanceId, face).forEach((triangle) => {
+                    position.add(triangle.a);
+                    position.add(triangle.b);
+                    position.add(triangle.c);
+                    count += 3;
+                });
+                position.divideScalar(count);
+                position.setY(position.y + .5);
+
+                if (pressed["Mouse"]) {
+                    placingSprite(position);
+                    placingSprite = undefined;
+                }
+            }
+        } else {
+            const [first] = raycaster.intersectObjects([billboards], true);
+
+            if (first) {
+                billboards.getFaceTriangles(first.instanceId).forEach((triangle) => pushTriangle(pointsVerts, triangle));
+
+                if (pressed["Mouse"]) {
+                    selectSprite(instance2sprite.get(first.instanceId));
+                }
+            }
+        }
+    }
+
+    spriteSelect.addEventListener("change", () => {
+        if (!selectedSprite) return;
+
+        selectedSprite.tile = spriteSelect.valueAsNumber;
+        const instance = sprite2instance.get(selectedSprite.id);
+
+        billboards.setTileAt(instance, selectedSprite.tile, 0);
+        billboards.update();
+    });
+
+    function updatePhysics() {
         camera.getWorldDirection(billboards.cameraWorldDirection);
 
         camera.getWorldDirection(forward);
@@ -561,16 +627,11 @@ async function start() {
 
         const motion = new THREE.Vector3();
 
-        if (held["w"]) motion.add(forward.clone().multiplyScalar(3));
-        if (held["s"]) motion.add(forward.clone().multiplyScalar(-3));
-        if (held["a"]) motion.add(left.clone().multiplyScalar(-3));
-        if (held["d"]) motion.add(left.clone().multiplyScalar(3));
-
-        if (!dialogue.hidden && pressed["Enter"]) {
-            dialogue.hidden = true;
-        } else if (nearby && pressed["Enter"]) {
-            dialogue.textContent = nearby.userData.text;
-            dialogue.hidden = false;
+        if (modeSelect.value === "game") {
+            if (held["w"]) motion.add(forward.clone().multiplyScalar(3));
+            if (held["s"]) motion.add(forward.clone().multiplyScalar(-3));
+            if (held["a"]) motion.add(left.clone().multiplyScalar(-3));
+            if (held["d"]) motion.add(left.clone().multiplyScalar(3));
         }
 
         kinematic.gravity = held["x"] ? 0 : 9;
@@ -611,18 +672,36 @@ async function start() {
 
         billboards.setPositionAt(guyIndex, guy.position);
         billboards.setTileAt(guyIndex, kinematic.hadGroundContact ? guyBackTile : guyFallTile);
+    }
+
+    function updateCamera() {
+        const delta = guy.position.clone().sub(controls.target);
+        controls.target.add(delta);
+        camera.position.add(delta);
+    }
+
+    function animate() {
+        if (blockMaterial.uniforms) blockMaterial.uniforms.frame.value = frame;
+        if (timer == 0) frame = (frame + 1) % 4;
+        timer = (timer + 1) % 20;
+
+        billboards.update();
+        renderer.render(scene, camera);
+
+        updatePlayback();
+        updateBlocksEdit();
+        updateSpritesEdit();
+
+        updatePhysics();
+        updateCamera();
+
+        controls.update();
+        stats.update();
 
         pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsVerts, 3));
         pointsVerts.length = 0;
 
         requestAnimationFrame(animate);
-
-        const delta = guy.position.clone().sub(controls.target);
-        controls.target.add(delta);
-        camera.position.add(delta);
-
-        controls.update();
-        stats.update();  
     };
 
     animate();

@@ -17,9 +17,18 @@
  */
 
 /**
+ * @typedef {Object} BlocksDataCharacter
+ * @property {number} id
+ * @property {number[]} position
+ * @property {number} tile
+ * @property {string} dialogue
+ */
+
+/**
  * @typedef {Object} BlocksDataProject
  * @property {BlocksDataDesign[]} designs
  * @property {BlocksDataShape[]} shapes
  * @property {BlocksDataBlock[]} blocks
+ * @property {BlocksDataCharacter[]} characters
  * @property {string} tileset
  */

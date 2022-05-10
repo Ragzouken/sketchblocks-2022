@@ -287,3 +287,56 @@ const wedgeBody =
         },
     ],
 }
+
+function makeGeometry(data) {
+    const positions = [];
+    const texcoords = [];
+    const normals = [];
+    const indexes = [];
+    const faces = [];
+
+    let nextIndex = 0;
+
+    data.faces.forEach((face, faceIndex) =>
+    {
+        // offset indices relative to existing vertices
+        const faceIndexes = face.triangles
+            .reduce((a, b) => [...a, ...b], [])
+            .map(index => nextIndex + index);
+
+        indexes.push(...faceIndexes);
+        nextIndex += face.positions.length;
+
+        // compute shared normal and add all positions/texcoords/normals
+        const p0 = new THREE.Vector3(...face.positions[0]);
+        const p1 = new THREE.Vector3(...face.positions[1]);
+        const p2 = new THREE.Vector3(...face.positions[2]);
+        
+        const normal = new THREE.Vector3();
+        normal.crossVectors(p1.sub(p0), p2.sub(p0)).normalize(); 
+
+        for (let i = 0; i < face.positions.length; ++i)
+        {
+            positions.push(...face.positions[i]);
+            texcoords.push(...face.texturing[i]);
+            faces.push(faceIndex);
+            normals.push(normal.x, normal.y, normal.z);
+        }
+    });
+
+    const p = new THREE.BufferAttribute(new Float32Array(positions), 3);
+    const t = new THREE.BufferAttribute(new Float32Array(texcoords), 2);
+    const n = new THREE.BufferAttribute(new Float32Array(normals), 3);
+    const f = new THREE.BufferAttribute(new Float32Array(faces), 1);
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", p);
+    geometry.setAttribute("normal", n);
+    geometry.setAttribute("uv", t);
+    geometry.setAttribute("face", f);
+    geometry.setIndex(indexes);
+
+    geometry.translate(-.5, -.5, -.5);
+
+    return geometry;
+}

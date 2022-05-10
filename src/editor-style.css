@@ -70,8 +70,13 @@ html, body {
     white-space: pre-wrap;
 
     position: absolute;
-    transform: translate(-50%, -50%);
     left: 50%; top: 75%;
+    transform: translate(-50%, -50%);
+}
+
+#renderer {
+    position: relative;
+    z-index: 0;
 }
 
 #sidebar {
@@ -80,6 +85,11 @@ html, body {
 
     padding: 8px;
     gap: 4px;
+}
+
+#mode-select {
+    display: flex;
+    flex-direction: row;
 }
 
 #shape-select {
@@ -92,21 +102,6 @@ html, body {
     gap: 4px;
 }
 
-#design-select {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-}
-
-#design-select input {
-    width: 32px;
-    height: 32px;
-}
-
-#design-select input:checked {
-    box-shadow: var(--blue-outline-shadow);
-}
-
 .radio-select label {
     position: relative;
 
@@ -115,8 +110,8 @@ html, body {
     -moz-appearance: none;
     -webkit-appearance: none;
 
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
 
     border-radius: 8px;
 }
@@ -136,12 +131,17 @@ html, body {
     width: 100%; height: 100%;
 }
 
-.radio-select > label img, .radio-select > label svg, button img, button svg, a svg {
+.radio-select > label img, 
+.radio-select > label svg, 
+button img, 
+button svg, 
+a svg {
     pointer-events: none;
     width: 32px; height: 32px;
 }
 
-.radio-select > label img, .radio-select > label svg {
+.radio-select > label img, 
+.radio-select > label svg {
     position: absolute;
     left: 50%; top: 50%;
     transform: translate(-50%, -50%);
@@ -166,4 +166,21 @@ html, body {
 
 .radio-select input[type="radio"]:checked + img {
     filter: none;
+}
+
+.tile-select {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+
+    gap: 4px;
+}
+
+.tile-select label {
+    width: 32px;
+    height: 32px;
+}
+
+.tile-select input:checked {
+    box-shadow: var(--blue-outline-shadow);
 }

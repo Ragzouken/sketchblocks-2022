@@ -12,6 +12,12 @@
     });
 }
 
+async function getCanvasBlob(canvas) {
+    return new Promise((resolve) => {
+        canvas.toBlob(resolve);
+    });
+}
+
 /**
  * @param {HTMLElement} element 
  */
